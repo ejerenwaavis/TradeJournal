@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../utils/api';
+import { SkeletonTableRows } from '../components/Skeleton';
 import toast from 'react-hot-toast';
 
 const RESULT_COLORS = {
@@ -25,17 +26,19 @@ export default function TradeLogPage() {
   const [trades, setTrades] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({ month: '', result: '', setup: '' });
+  const [filters, setFilters] = useState({ month: '', result: '', setup: '', instrument: '' });
   const [sort, setSort] = useState({ key: 'entryDate', dir: -1 });
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(null); // id being quick-closed
 
   const fetchTrades = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit: 25 });
-      if (filters.month) params.set('month', filters.month);
-      if (filters.result) params.set('result', filters.result);
-      if (filters.setup) params.set('setup', filters.setup);
+      if (filters.month)      params.set('month', filters.month);
+      if (filters.result)     params.set('result', filters.result);
+      if (filters.setup)      params.set('setup', filters.setup);
+      if (filters.instrument) params.set('instrument', filters.instrument);
       const { data } = await api.get(`/trades?${params}`);
       setTrades(data.trades);
       setTotal(data.total);
@@ -57,6 +60,16 @@ export default function TradeLogPage() {
     } catch { toast.error('Failed to delete'); }
   };
 
+  const quickClose = async (id, result) => {
+    setClosing(id);
+    try {
+      await api.patch(`/trades/${id}`, { status: 'closed', result });
+      toast.success(`Marked as ${result}`);
+      fetchTrades();
+    } catch { toast.error('Failed to update'); }
+    finally { setClosing(null); }
+  };
+
   const sorted = [...trades].sort((a, b) => {
     const av = a[sort.key], bv = b[sort.key];
     if (av == null) return 1; if (bv == null) return -1;
@@ -67,14 +80,15 @@ export default function TradeLogPage() {
     setSort((s) => ({ key, dir: s.key === key ? -s.dir : -1 }));
 
   const columns = [
-    { col: 'entryDate', label: 'Date' },
+    { col: 'entryDate',  label: 'Date' },
     { col: 'instrument', label: 'Instrument' },
-    { col: 'direction', label: 'Dir' },
-    { col: 'setupType', label: 'Setup' },
-    { col: 'timeframe', label: 'TF' },
+    { col: 'direction',  label: 'Dir' },
+    { col: 'setupType',  label: 'Setup' },
+    { col: 'session',    label: 'Session' },
+    { col: 'timeframe',  label: 'TF' },
     { col: 'riskReward', label: 'R:R' },
-    { col: 'result', label: 'Result' },
-    { col: 'pnlDollars', label: 'P&L $' },
+    { col: 'result',     label: 'Result' },
+    { col: 'pnlPips',    label: 'Points' },
   ];
 
   return (
@@ -88,6 +102,13 @@ export default function TradeLogPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          placeholder="Instrument…"
+          value={filters.instrument}
+          onChange={(e) => { setFilters((f) => ({ ...f, instrument: e.target.value })); setPage(1); }}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-32"
+        />
         <input
           type="month"
           value={filters.month}
@@ -111,9 +132,9 @@ export default function TradeLogPage() {
           onChange={(e) => { setFilters((f) => ({ ...f, setup: e.target.value })); setPage(1); }}
           className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40"
         />
-        {(filters.month || filters.result || filters.setup) && (
+        {(filters.month || filters.result || filters.setup || filters.instrument) && (
           <button
-            onClick={() => { setFilters({ month: '', result: '', setup: '' }); setPage(1); }}
+            onClick={() => { setFilters({ month: '', result: '', setup: '', instrument: '' }); setPage(1); }}
             className="text-xs text-gray-400 hover:text-gray-200 px-2"
           >
             Clear
@@ -132,9 +153,7 @@ export default function TradeLogPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
-            {loading && (
-              <tr><td colSpan={9} className="px-3 py-6 text-center text-gray-500">Loading…</td></tr>
-            )}
+            {loading && <SkeletonTableRows cols={9} rows={8} />}
             {!loading && sorted.length === 0 && (
               <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-500">No trades found.</td></tr>
             )}
@@ -150,17 +169,38 @@ export default function TradeLogPage() {
                   </span>
                 </td>
                 <td className="px-3 py-2.5 text-gray-400">{t.setupType || '—'}</td>
+                <td className="px-3 py-2.5 text-gray-500 text-xs">{t.session || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-400">{t.timeframe || '—'}</td>
                 <td className="px-3 py-2.5 text-gray-300">{t.riskReward ?? '—'}</td>
                 <td className={`px-3 py-2.5 font-medium capitalize ${RESULT_COLORS[t.result] || 'text-gray-400'}`}>
                   {t.result || 'open'}
                 </td>
-                <td className={`px-3 py-2.5 font-medium ${t.pnlDollars > 0 ? 'text-emerald-400' : t.pnlDollars < 0 ? 'text-rose-400' : 'text-gray-400'}`}>
-                  {t.pnlDollars != null ? `$${t.pnlDollars.toFixed(2)}` : '—'}
+                <td className={`px-3 py-2.5 font-medium ${
+                  t.pnlPips > 0 ? 'text-emerald-400' : t.pnlPips < 0 ? 'text-rose-400' : 'text-gray-400'
+                }`}>
+                  {t.pnlPips != null ? `${t.pnlPips > 0 ? '+' : ''}${t.pnlPips}` : '—'}
                 </td>
                 <td className="px-3 py-2.5 text-right whitespace-nowrap">
                   <Link to={`/trades/${t._id}`} className="text-xs text-indigo-400 hover:underline mr-3">View</Link>
-                  <button onClick={() => handleDelete(t._id)} className="text-xs text-rose-500 hover:underline">Del</button>
+                  {t.status === 'open' && (
+                    <>
+                      <button
+                        onClick={() => quickClose(t._id, 'win')}
+                        disabled={closing === t._id}
+                        className="text-xs text-emerald-500 hover:underline mr-2 disabled:opacity-50"
+                      >
+                        W
+                      </button>
+                      <button
+                        onClick={() => quickClose(t._id, 'loss')}
+                        disabled={closing === t._id}
+                        className="text-xs text-rose-500 hover:underline mr-3 disabled:opacity-50"
+                      >
+                        L
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => handleDelete(t._id)} className="text-xs text-gray-600 hover:text-rose-500 hover:underline">Del</button>
                 </td>
               </tr>
             ))}

@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import TagInput from '../components/TagInput';
+import { SESSIONS } from '../utils/ictTags';
 
 const STEPS = ['Charts & AI', 'Trade Details', 'Notes & Emotion'];
 
@@ -16,7 +18,6 @@ const EMPTY_FORM = {
   status: 'open',
   exitPrice: '',
   pnlPips: '',
-  pnlDollars: '',
   result: '',
   lotSize: '',
   positionSize: '',
@@ -24,7 +25,7 @@ const EMPTY_FORM = {
   exitDate: '',
   timeframe: '',
   setupType: '',
-  confluences: '',
+  confluences: [],
   session: '',
   emotionPreTrade: '',
   emotionPostTrade: '',
@@ -32,6 +33,14 @@ const EMPTY_FORM = {
   preTradeNotes: '',
   postTradeNotes: '',
 };
+
+const toLocalISO = () => {
+  const now = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}T${p(now.getHours())}:${p(now.getMinutes())}`;
+};
+
+const getInitialForm = () => ({ ...EMPTY_FORM, entryDate: toLocalISO(), exitDate: toLocalISO() });
 
 function Field({ label, children }) {
   return (
@@ -48,7 +57,7 @@ const selectCls = `${inputCls} cursor-pointer`;
 export default function NewTradePage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(getInitialForm);
   const [charts, setCharts] = useState([{ label: 'Entry', tvLink: '', imageUrl: '', aiRaw: null }]);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,19 +70,24 @@ export default function NewTradePage() {
 
   const applyAiResult = (result) => {
     if (!result) return;
+    const ok = (v) => v && v !== 'null' && v !== 'undefined' ? v : null;
     setForm((f) => ({
       ...f,
-      instrument: result.instrument || f.instrument,
-      assetClass: result.assetClass && ['forex', 'stocks'].includes(result.assetClass) ? result.assetClass : f.assetClass,
-      direction: result.direction && ['long', 'short'].includes(result.direction) ? result.direction : f.direction,
-      timeframe: result.timeframe || f.timeframe,
-      entryPrice: result.entryPrice ?? f.entryPrice,
-      stopLoss: result.stopLoss ?? f.stopLoss,
+      instrument:  ok(result.instrument)  ?? f.instrument,
+      assetClass:  result.assetClass && ['forex','stocks','crypto','commodities'].includes(result.assetClass) ? result.assetClass : f.assetClass,
+      direction:   result.direction  && ['long','short'].includes(result.direction) ? result.direction : f.direction,
+      timeframe:   ok(result.timeframe)   ?? f.timeframe,
+      entryPrice:  result.entryPrice  ?? f.entryPrice,
+      stopLoss:    result.stopLoss    ?? f.stopLoss,
       takeProfit1: result.takeProfit1 ?? f.takeProfit1,
       takeProfit2: result.takeProfit2 ?? f.takeProfit2,
-      setupType: result.setupType || f.setupType,
-      confluences: result.confluences?.join(', ') || f.confluences,
-      session: result.session || f.session,
+      pnlPips:     result.pnlPips     ?? f.pnlPips,
+      riskReward:  result.riskReward  ?? f.riskReward,
+      setupType:   ok(result.setupType)   ?? f.setupType,
+      confluences: result.confluences?.length
+        ? [...new Set([...f.confluences, ...result.confluences.filter((c) => ok(c))])]
+        : f.confluences,
+      session:     ok(result.session)     ?? f.session,
       preTradeNotes: result.notes ? `[AI] ${result.notes}` : f.preTradeNotes,
     }));
   };
@@ -129,7 +143,7 @@ export default function NewTradePage() {
     try {
       const payload = {
         ...form,
-        confluences: form.confluences ? form.confluences.split(',').map((s) => s.trim()).filter(Boolean) : [],
+        confluences: Array.isArray(form.confluences) ? form.confluences : (form.confluences ? form.confluences.split(',').map((s) => s.trim()).filter(Boolean) : []),
         charts: charts.filter((c) => c.tvLink || c.imageUrl),
       };
       // Convert empty strings to undefined so Mongoose ignores them
@@ -251,7 +265,7 @@ export default function NewTradePage() {
                   form.stopLoss && `SL ${form.stopLoss}`,
                   form.setupType,
                   form.session,
-                ].filter(Boolean).map((v) => (
+                ].filter((v) => v && v !== 'null' && v !== 'undefined').map((v) => (
                   <span key={v} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{v}</span>
                 ))}
               </div>
@@ -305,8 +319,8 @@ export default function NewTradePage() {
                     <Field label="Exit Price">
                       <input type="number" step="any" value={form.exitPrice} onChange={set('exitPrice')} className={inputCls} />
                     </Field>
-                    <Field label="P&L $">
-                      <input type="number" step="any" value={form.pnlDollars} onChange={set('pnlDollars')} className={inputCls} />
+                    <Field label="Points / Handles">
+                      <input type="number" step="any" value={form.pnlPips} onChange={set('pnlPips')} placeholder="e.g. 12.5" className={inputCls} />
                     </Field>
                   </>
                 )}
@@ -326,7 +340,9 @@ export default function NewTradePage() {
                 <Field label="Session">
                   <select value={form.session} onChange={set('session')} className={selectCls}>
                     <option value="">—</option>
-                    {['London','NY','Asian','London/NY Overlap'].map((s) => <option key={s}>{s}</option>)}
+                    {SESSIONS.map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
                   </select>
                 </Field>
                 <Field label="Entry Price">
@@ -344,8 +360,11 @@ export default function NewTradePage() {
                 <Field label="Setup Type">
                   <input type="text" value={form.setupType} onChange={set('setupType')} placeholder="OB, FVG, BOS+MSS…" className={inputCls} />
                 </Field>
-                <Field label="Confluences (comma-separated)">
-                  <input type="text" value={form.confluences} onChange={set('confluences')} placeholder="HTF OB, 0.79 fib, discount" className={inputCls} />
+                <Field label="Confluences">
+                  <TagInput
+                    value={form.confluences}
+                    onChange={(tags) => setForm((f) => ({ ...f, confluences: tags }))}
+                  />
                 </Field>
                 <Field label="Entry Date">
                   <input type="datetime-local" value={form.entryDate} onChange={set('entryDate')} className={inputCls} />
@@ -353,8 +372,8 @@ export default function NewTradePage() {
                 <Field label="Exit Date">
                   <input type="datetime-local" value={form.exitDate} onChange={set('exitDate')} className={inputCls} />
                 </Field>
-                <Field label="P&L Pips">
-                  <input type="number" step="any" value={form.pnlPips} onChange={set('pnlPips')} className={inputCls} />
+                <Field label="Points / Handles">
+                  <input type="number" step="any" value={form.pnlPips} onChange={set('pnlPips')} placeholder="e.g. 12.5" className={inputCls} />
                 </Field>
                 <Field label="Position Size ($)">
                   <input type="number" step="any" value={form.positionSize} onChange={set('positionSize')} className={inputCls} />

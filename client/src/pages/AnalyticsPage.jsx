@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../utils/api';
+import { SkeletonSummaryCards, SkeletonChartBlock } from '../components/Skeleton';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -22,6 +23,7 @@ export default function AnalyticsPage() {
   const [bySession, setBySession] = useState([]);
   const [pnlData, setPnlData] = useState([]);
   const [emotionData, setEmotion] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('month');
   const [month, setMonth] = useState(() => {
     const d = new Date();
@@ -42,6 +44,7 @@ export default function AnalyticsPage() {
   };
 
   useEffect(() => {
+    setLoading(true);
     const q = buildParams();
     Promise.all([
       api.get(`/analytics/summary?${q}`),
@@ -55,7 +58,7 @@ export default function AnalyticsPage() {
       setBySession(bsess.data.data);
       setPnlData(pnl.data.data);
       setEmotion(em.data.data);
-    });
+    }).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, month]);
 
@@ -117,22 +120,65 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Best / Worst setup highlight */}
+      {bySetup.length > 0 && (() => {
+        const qualified = bySetup.filter((s) => s.total >= 2);
+        if (!qualified.length) return null;
+        const best  = qualified.reduce((a, b) => b.winRate > a.winRate ? b : a);
+        const worst = qualified.reduce((a, b) => b.winRate < a.winRate ? b : a);
+        return (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-emerald-950 border border-emerald-800 rounded-xl p-4 flex items-center gap-4">
+              <div className="text-2xl">🏆</div>
+              <div>
+                <p className="text-xs text-emerald-500 uppercase tracking-wider mb-0.5">Best Setup</p>
+                <p className="text-lg font-bold text-emerald-300">{best._id || 'Unknown'}</p>
+                <p className="text-xs text-emerald-600">{(best.winRate * 100).toFixed(0)}% WR · {best.total} trades · Avg R:R {best.avgRR?.toFixed(2) ?? '—'}</p>
+              </div>
+            </div>
+            {worst._id !== best._id && (
+              <div className="bg-rose-950 border border-rose-900 rounded-xl p-4 flex items-center gap-4">
+                <div className="text-2xl">📊</div>
+                <div>
+                  <p className="text-xs text-rose-500 uppercase tracking-wider mb-0.5">Needs Work</p>
+                  <p className="text-lg font-bold text-rose-300">{worst._id || 'Unknown'}</p>
+                  <p className="text-xs text-rose-700">{(worst.winRate * 100).toFixed(0)}% WR · {worst.total} trades · Avg R:R {worst.avgRR?.toFixed(2) ?? '—'}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: 'Closed Trades', value: summary?.totalTrades ?? '—' },
-          { label: 'Win Rate', value: `${winPct}%` },
-          { label: 'Avg R:R', value: summary?.avgRR != null ? summary.avgRR.toFixed(2) : '—' },
-          { label: 'Total P&L', value: summary ? `$${(summary.totalPnlDollars ?? 0).toFixed(2)}` : '—' },
-        ].map(({ label, value }) => (
+        {loading && <SkeletonSummaryCards count={4} />}
+        {!loading && [{
+          label: 'Closed Trades', value: summary?.totalTrades ?? '—' },
+          { label: 'Win Rate', value: `${winPct}%`, sub: `${summary?.wins ?? 0}W / ${summary?.losses ?? 0}L` },
+          { label: 'Avg R:R',   value: summary?.avgRR != null ? summary.avgRR.toFixed(2) : '—' },
+          { label: 'Total Points', value: summary?.totalPnlPips != null ? `${summary.totalPnlPips > 0 ? '+' : ''}${summary.totalPnlPips}` : '—',
+            cls: summary?.totalPnlPips > 0 ? 'text-emerald-400' : summary?.totalPnlPips < 0 ? 'text-rose-400' : 'text-gray-100' },
+        ].map(({ label, value, sub, cls }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <p className="text-xs text-gray-500 uppercase">{label}</p>
-            <p className="text-2xl font-bold mt-1 text-gray-100">{value}</p>
+            <p className={`text-2xl font-bold mt-1 ${cls || 'text-gray-100'}`}>{value}</p>
+            {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {loading && (
+          <>
+            <SkeletonChartBlock />
+            <SkeletonChartBlock />
+            <SkeletonChartBlock />
+            <SkeletonChartBlock />
+          </>
+        )}
+        {!loading && (
+          <>
         {/* Win rate donut */}
         <Card title="Win / Loss / BE">
           {pieData.length === 0 ? (
@@ -149,8 +195,8 @@ export default function AnalyticsPage() {
           )}
         </Card>
 
-        {/* P&L over time */}
-        <Card title="Cumulative P&L ($)">
+        {/* Points over time */}
+        <Card title="Cumulative Points / Handles">
           {pnlData.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No closed trades in this period</p>
           ) : (
@@ -159,7 +205,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} />
                 <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip formatter={(v) => [`$${v}`, 'Cumulative P&L']} contentStyle={{ background: '#1f2937', border: '1px solid #374151' }} />
+                <Tooltip formatter={(v) => [`${v}`, 'Cumulative Points']} contentStyle={{ background: '#1f2937', border: '1px solid #374151' }} />
                 <Line type="monotone" dataKey="cumulativePnl" stroke="#6366f1" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
@@ -201,6 +247,8 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           )}
         </Card>
+        </>
+        )}
       </div>
 
       {/* Emotion heatmap */}
@@ -244,7 +292,7 @@ export default function AnalyticsPage() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-800">
-                  {['Setup', 'Trades', 'Win Rate', 'Avg R:R', 'Total P&L'].map((h) => (
+                  {['Setup', 'Trades', 'Win Rate', 'Avg R:R', 'Points'].map((h) => (
                     <th key={h} className={`px-3 py-2 text-xs font-medium text-gray-500 ${h === 'Setup' ? 'text-left' : 'text-right'}`}>{h}</th>
                   ))}
                 </tr>
@@ -259,7 +307,7 @@ export default function AnalyticsPage() {
                     </td>
                     <td className="px-3 py-2 text-right text-gray-300">{s.avgRR?.toFixed(2) ?? '—'}</td>
                     <td className={`px-3 py-2 text-right font-medium ${s.totalPnl > 0 ? 'text-emerald-400' : s.totalPnl < 0 ? 'text-rose-400' : 'text-gray-400'}`}>
-                      ${s.totalPnl?.toFixed(2) ?? '—'}
+                      {s.totalPnl != null ? `${s.totalPnl > 0 ? '+' : ''}${s.totalPnl.toFixed(1)}` : '—'}
                     </td>
                   </tr>
                 ))}
