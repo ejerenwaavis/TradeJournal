@@ -13,6 +13,8 @@ import NewTradePage from './pages/NewTradePage';
 import TradeDetailPage from './pages/TradeDetailPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import InsightsPage from './pages/InsightsPage';
+import BacktestPage from './pages/BacktestPage';
+import BacktestProjectsPage from './pages/BacktestProjectsPage';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -47,6 +49,8 @@ export default function App() {
                     <Route path="/trades/:id" element={<TradeDetailPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/insights" element={<InsightsPage />} />
+                    <Route path="/backtests" element={<BacktestPage />} />
+                    <Route path="/backtests/projects" element={<BacktestProjectsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Layout>

@@ -57,6 +57,14 @@ const tradeSchema = new mongoose.Schema(
     },
     executionRating: { type: Number, min: 1, max: 5 },
 
+    // Backtest & planning fields
+    htfBias:      { type: String, enum: ['Bullish', 'Bearish', 'Neutral', ''], default: '' },
+    riskPercent:  { type: Number },
+    durationMins: { type: Number },
+    account:      { type: String, default: '' },
+    tradeType:    { type: String, enum: ['live', 'backtest'], default: 'live' },
+    projectId:    { type: mongoose.Schema.Types.ObjectId, ref: 'BacktestProject', default: null },
+
     // Notes
     preTradeNotes: { type: String, default: '' },
     postTradeNotes: { type: String, default: '' },

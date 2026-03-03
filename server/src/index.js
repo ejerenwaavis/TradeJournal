@@ -9,6 +9,7 @@ const tradeRoutes = require('./routes/trades');
 const chartRoutes = require('./routes/charts');
 const analyticsRoutes = require('./routes/analytics');
 const insightsRoutes = require('./routes/insights');
+const backtestProjectRoutes = require('./routes/backtest-projects');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,6 +27,7 @@ app.use('/api/trades', tradeRoutes);
 app.use('/api/charts', chartRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
+app.use('/api/backtest-projects', backtestProjectRoutes);
 
 mongoose
   .connect(process.env.MONGODB_URI)

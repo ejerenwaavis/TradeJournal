@@ -7,6 +7,7 @@ import {
   TableCellsIcon,
   ChartBarIcon,
   SparklesIcon,
+  BeakerIcon,
   ArrowRightStartOnRectangleIcon,
   SunIcon,
   MoonIcon,
@@ -18,6 +19,7 @@ const links = [
   { to: '/trades', icon: TableCellsIcon, label: 'Trade Log' },
   { to: '/analytics', icon: ChartBarIcon, label: 'Analytics' },
   { to: '/insights', icon: SparklesIcon, label: 'AI Insights' },
+  { to: '/backtests', icon: BeakerIcon, label: 'Backtesting' },
 ];
 
 export default function Layout({ children }) {
@@ -43,7 +45,7 @@ export default function Layout({ children }) {
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-1.5">
-          {links.map(({ to, icon: Icon, label }) => (
+          {links.map(({ to, icon: Icon, label }) => ( // eslint-disable-line no-unused-vars -- Icon used as JSX component
             <NavLink
               key={to}
               to={to}

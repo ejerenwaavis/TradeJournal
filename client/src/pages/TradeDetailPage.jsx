@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import TagInput from '../components/TagInput';
+import SetupTypeInput from '../components/SetupTypeInput';
 import { SESSIONS } from '../utils/ictTags';
 import { SkeletonDetailCard } from '../components/Skeleton';
 
@@ -295,6 +296,7 @@ export default function TradeDetailPage() {
             <SectionHeading>Trade Setup</SectionHeading>
             <div className="grid grid-cols-2 gap-x-8 gap-y-2">
               <ReadRow label="Instrument"    value={trade.instrument} />
+              <ReadRow label="HTF Bias"      value={trade.htfBias} />
               <ReadRow label="Asset Class"   value={trade.assetClass} />
               <ReadRow label="Timeframe"     value={trade.timeframe} />
               <ReadRow label="Session"       value={trade.session} />
@@ -396,8 +398,17 @@ export default function TradeDetailPage() {
                 ))}
               </select>
             </Field>
+            <Field label="HTF Bias">
+              <select value={form.htfBias || ''} onChange={set('htfBias')} className={selectCls}>
+                <option value="">—</option>
+                {['Bullish', 'Bearish', 'Neutral'].map((b) => <option key={b}>{b}</option>)}
+              </select>
+            </Field>
+            <Field label="Account">
+              <input type="text" value={form.account || ''} onChange={set('account')} placeholder="e.g. Live, Prop, Paper" className={inputCls} />
+            </Field>
             <Field label="Setup Type">
-              <input type="text" value={form.setupType || ''} onChange={set('setupType')} className={inputCls} />
+              <SetupTypeInput value={form.setupType || ''} onChange={(v) => setForm((f) => ({ ...f, setupType: v }))} />
             </Field>
             <Field label="Confluences">
               <TagInput

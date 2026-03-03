@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import TagInput from '../components/TagInput';
+import SetupTypeInput from '../components/SetupTypeInput';
 import { SESSIONS } from '../utils/ictTags';
 
 const STEPS = ['Charts & AI', 'Trade Details', 'Notes & Emotion'];
@@ -25,6 +26,8 @@ const EMPTY_FORM = {
   exitDate: '',
   timeframe: '',
   setupType: '',
+  htfBias: '',
+  account: '',
   confluences: [],
   session: '',
   emotionPreTrade: '',
@@ -285,6 +288,12 @@ export default function NewTradePage() {
                   <option value="short">Short</option>
                 </select>
               </Field>
+              <Field label="HTF Bias">
+                <select value={form.htfBias} onChange={set('htfBias')} className={selectCls}>
+                  <option value="">—</option>
+                  {['Bullish', 'Bearish', 'Neutral'].map((b) => <option key={b}>{b}</option>)}
+                </select>
+              </Field>
               <Field label="Asset Class *">
                 <select value={form.assetClass} onChange={set('assetClass')} className={selectCls}>
                   <option value="forex">Forex</option>
@@ -292,6 +301,9 @@ export default function NewTradePage() {
                   <option value="crypto">Crypto</option>
                   <option value="commodities">Commodities</option>
                 </select>
+              </Field>
+              <Field label="Account">
+                <input type="text" value={form.account} onChange={set('account')} placeholder="e.g. Live, Prop, Paper" className={inputCls} />
               </Field>
             </div>
 
@@ -358,7 +370,7 @@ export default function NewTradePage() {
                   <input type="number" step="any" value={form.takeProfit2} onChange={set('takeProfit2')} className={inputCls} />
                 </Field>
                 <Field label="Setup Type">
-                  <input type="text" value={form.setupType} onChange={set('setupType')} placeholder="OB, FVG, BOS+MSS…" className={inputCls} />
+                  <SetupTypeInput value={form.setupType} onChange={(v) => setForm((f) => ({ ...f, setupType: v }))} />
                 </Field>
                 <Field label="Confluences">
                   <TagInput
