@@ -28,27 +28,43 @@ const upload = multer({
 // Strict SSRF guard — only allow TradingView snapshot links
 const TV_LINK_RE = /^https:\/\/www\.tradingview\.com\/x\/[a-zA-Z0-9]+\/?$/;
 
-const CHART_PROMPT = `You are a professional trading analyst. Analyze this chart image and respond ONLY with valid JSON (no markdown fences) matching this exact shape:
+const CHART_PROMPT = `You are an expert ICT (Inner Circle Trader) / SMC (Smart Money Concepts) trading analyst. Carefully study this chart screenshot and extract all visible trade information.
+
+WHAT TO LOOK FOR:
+- Instrument/ticker: shown top-left of chart (e.g. MNQ1!, ES1!, NQ1!, EURUSD, GBPUSD, BTCUSDT)
+- Timeframe: shown next to the ticker (1, 3, 5, 15, 1H, 4H, 1D, 1W)
+- Trade direction: arrows, entry markers, colored boxes/labels. Green/bullish = long, Red/bearish = short
+- Price levels: read the RIGHT-SIDE price axis. Entry, SL, and TP lines are often horizontal dashed/solid lines with price labels
+- ICT/SMC structures: Order Blocks (OB) = colored rectangles; Fair Value Gaps (FVG) = gaps between candles often highlighted; BOS/ChoCH/MSS = structural break labels on the chart
+- Session: time-based shading, background color bands, or text labels (London, NY, Asian, Overlap)
+
+ASSET CLASS RULES (critical — do not guess):
+- MNQ, NQ, ES, YM, RTY, MES, MYM (US index futures) → "stocks"
+- EUR/USD, GBP/JPY, AUD/CAD and other forex pairs → "forex"
+- BTC, ETH, SOL and other crypto → "crypto"
+- GC (Gold), CL (Oil), SI (Silver) → "commodities"
+- If unknown, use null
+
+Respond ONLY with valid JSON — no markdown fences, no text outside the JSON object:
 {
-  "instrument": "string or null",
+  "instrument": "ticker string or null",
   "assetClass": "forex|stocks|crypto|commodities|null",
   "direction": "long|short|null",
-  "timeframe": "1M|5M|15M|1H|4H|D|W|null",
+  "timeframe": "1M|3M|5M|15M|1H|4H|D|W|null",
   "entryPrice": number or null,
   "stopLoss": number or null,
   "takeProfit1": number or null,
   "takeProfit2": number or null,
-  "setupType": "string description of the setup (e.g. OB, FVG, BOS+MSS) or null",
-  "confluences": ["array", "of", "confluence", "strings"],
+  "setupType": "describe the setup pattern visible (e.g. FVG, OB, BOS+MSS, ChoCH+OB, Liquidity Sweep) or null",
+  "confluences": ["list every confluence you can identify from the chart"],
   "session": "London|NY|Asian|London/NY Overlap|null",
-  "notes": "brief observation about the chart or null"
-}
-If a field cannot be determined from the chart, use null. Do not include explanation text outside the JSON.`;
+  "notes": "one concise sentence about the key context or trade narrative visible on the chart, or null"
+}`;
 
 async function analyzeImageUrl(imageUrl) {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    max_tokens: 800,
+    model: 'gpt-4o-mini',
+    max_tokens: 1200,
     messages: [
       {
         role: 'user',

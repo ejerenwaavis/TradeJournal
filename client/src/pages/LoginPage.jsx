@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import SocialAuthButtons from '../components/SocialAuthButtons';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -60,6 +61,15 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="flex-1 h-px bg-gray-800" />
+          <span className="text-xs text-gray-600">or continue with</span>
+          <div className="flex-1 h-px bg-gray-800" />
+        </div>
+
+        <SocialAuthButtons onSuccess={() => navigate('/')} />
+
         <p className="text-center text-xs text-gray-500 mt-4">
           No account?{' '}
           <Link to="/register" className="text-indigo-400 hover:underline">Register</Link>

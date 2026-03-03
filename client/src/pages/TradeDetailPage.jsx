@@ -31,6 +31,13 @@ export default function TradeDetailPage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') setLightboxIdx(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     api.get(`/trades/${id}`)
@@ -96,16 +103,32 @@ export default function TradeDetailPage() {
         <button onClick={handleDelete} className="text-xs text-rose-500 hover:underline">Delete</button>
       </div>
 
-      {/* Charts */}
+      {/* Charts — click to expand */}
       {trade.charts?.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {trade.charts.map((c, i) => (
             c.imageUrl && (
-              <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                <p className="text-xs text-gray-500 px-3 py-1.5 border-b border-gray-800">{c.label || `Chart ${i + 1}`}</p>
-                <img src={c.imageUrl} alt={c.label} className="w-full object-contain max-h-52" />
+              <div
+                key={i}
+                className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden cursor-zoom-in hover:border-indigo-600 transition-colors group"
+                onClick={() => setLightboxIdx(i)}
+              >
+                <p className="text-xs text-gray-500 px-3 py-1.5 border-b border-gray-800 flex items-center justify-between">
+                  <span>{c.label || `Chart ${i + 1}`}</span>
+                  <span className="opacity-0 group-hover:opacity-100 text-indigo-400 transition-opacity">⤢ expand</span>
+                </p>
+                <div className="relative">
+                  <img src={c.imageUrl} alt={c.label} className="w-full object-contain max-h-52" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
+                </div>
                 {c.tvLink && (
-                  <a href={c.tvLink} target="_blank" rel="noreferrer" className="block text-xs text-center text-indigo-400 hover:underline py-1.5">
+                  <a
+                    href={c.tvLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="block text-xs text-center text-indigo-400 hover:underline py-1.5"
+                  >
                     Open on TradingView ↗
                   </a>
                 )}
@@ -230,6 +253,69 @@ export default function TradeDetailPage() {
             <button onClick={handleSave} disabled={saving} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg">
               {saving ? 'Saving…' : 'Save Changes'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxIdx !== null && trade.charts?.[lightboxIdx]?.imageUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-3"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <div
+            className="w-full max-w-6xl bg-gray-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+            style={{ maxHeight: '94vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 shrink-0">
+              <span className="text-sm font-medium text-gray-200">
+                {trade.charts[lightboxIdx].label || `Chart ${lightboxIdx + 1}`}
+                <span className="ml-2 text-xs text-gray-500">· ESC or click outside to close</span>
+              </span>
+              <button onClick={() => setLightboxIdx(null)} className="text-gray-500 hover:text-white text-xl leading-none px-1">✕</button>
+            </div>
+            {/* Chart + Notes side by side */}
+            <div className="flex flex-col md:flex-row flex-1 min-h-0">
+              <div className="flex-1 min-h-0 flex items-center justify-center bg-black p-2">
+                <img
+                  src={trade.charts[lightboxIdx].imageUrl}
+                  alt="chart"
+                  className="max-w-full max-h-full object-contain"
+                  style={{ maxHeight: '78vh' }}
+                />
+              </div>
+              {(trade.preTradeNotes || trade.postTradeNotes) && (
+                <div className="w-full md:w-72 shrink-0 border-t md:border-t-0 md:border-l border-gray-800 p-4 overflow-y-auto space-y-5 bg-gray-950">
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Trade Notes</p>
+                  {trade.preTradeNotes && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Pre-Trade</p>
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{trade.preTradeNotes}</p>
+                    </div>
+                  )}
+                  {trade.postTradeNotes && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-1.5">Post-Trade</p>
+                      <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{trade.postTradeNotes}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Multi-chart dots */}
+            {trade.charts.filter((c) => c.imageUrl).length > 1 && (
+              <div className="flex justify-center gap-2 py-2.5 border-t border-gray-800 shrink-0">
+                {trade.charts.map((c, i) => c.imageUrl && (
+                  <button
+                    key={i}
+                    onClick={() => setLightboxIdx(i)}
+                    className={`w-2.5 h-2.5 rounded-full transition-colors ${i === lightboxIdx ? 'bg-indigo-400' : 'bg-gray-600 hover:bg-gray-400'}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

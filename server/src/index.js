@@ -4,6 +4,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 
 const authRoutes = require('./routes/auth');
+const socialAuthRoutes = require('./routes/socialAuth');
 const tradeRoutes = require('./routes/trades');
 const chartRoutes = require('./routes/charts');
 const analyticsRoutes = require('./routes/analytics');
@@ -16,13 +17,15 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
+// Health check — available at both /health and /api/health
+app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', socialAuthRoutes);
 app.use('/api/trades', tradeRoutes);
 app.use('/api/charts', chartRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
-
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 mongoose
   .connect(process.env.MONGODB_URI)

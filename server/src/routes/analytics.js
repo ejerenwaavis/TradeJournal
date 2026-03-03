@@ -37,7 +37,7 @@ router.get('/summary', async (req, res) => {
           breakevens: { $sum: { $cond: [{ $eq: ['$result', 'breakeven'] }, 1, 0] } },
           totalPnlDollars: { $sum: { $ifNull: ['$pnlDollars', 0] } },
           totalPnlPips: { $sum: { $ifNull: ['$pnlPips', 0] } },
-          avgRR: { $avg: '$riskReward' },
+          avgRR: { $avg: { $ifNull: ['$riskReward', null] } },
         },
       },
       {

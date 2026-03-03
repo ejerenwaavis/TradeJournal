@@ -122,8 +122,8 @@ export default function AnalyticsPage() {
         {[
           { label: 'Closed Trades', value: summary?.totalTrades ?? '—' },
           { label: 'Win Rate', value: `${winPct}%` },
-          { label: 'Avg R:R', value: summary?.avgRR?.toFixed(2) ?? '—' },
-          { label: 'Total P&L', value: summary ? `$${summary.totalPnlDollars.toFixed(2)}` : '—' },
+          { label: 'Avg R:R', value: summary?.avgRR != null ? summary.avgRR.toFixed(2) : '—' },
+          { label: 'Total P&L', value: summary ? `$${(summary.totalPnlDollars ?? 0).toFixed(2)}` : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <p className="text-xs text-gray-500 uppercase">{label}</p>

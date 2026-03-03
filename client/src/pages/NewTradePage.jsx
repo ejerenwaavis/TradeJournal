@@ -172,7 +172,7 @@ export default function NewTradePage() {
         {/* STEP 0 — Charts */}
         {step === 0 && (
           <>
-            <p className="text-sm text-gray-400">Paste your TradingView snapshot link(s) and click Analyze — GPT-4o will pre-fill the trade fields. Or drag-drop a screenshot.</p>
+            <p className="text-sm text-gray-400">Paste your TradingView snapshot link(s) and click Analyze — AI will pre-fill most fields automatically. Or drag-drop a screenshot.</p>
             {charts.map((chart, i) => (
               <div key={i} className="space-y-2 p-4 bg-gray-800 rounded-lg">
                 <div className="flex items-center gap-2">
@@ -239,15 +239,31 @@ export default function NewTradePage() {
         {/* STEP 1 — Trade Details */}
         {step === 1 && (
           <>
+            {/* AI-filled summary pills */}
+            {charts[0]?.aiRaw && (
+              <div className="flex flex-wrap gap-1.5 p-3 bg-indigo-950/40 border border-indigo-900/50 rounded-lg">
+                <span className="text-xs text-gray-500 self-center mr-1">AI detected:</span>
+                {[
+                  form.instrument,
+                  form.direction,
+                  form.timeframe && `${form.timeframe} TF`,
+                  form.entryPrice && `Entry ${form.entryPrice}`,
+                  form.stopLoss && `SL ${form.stopLoss}`,
+                  form.setupType,
+                  form.session,
+                ].filter(Boolean).map((v) => (
+                  <span key={v} className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{v}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Core fields — just what AI can't fill */}
             <div className="grid grid-cols-2 gap-4">
               <Field label="Instrument *">
                 <input type="text" value={form.instrument} onChange={set('instrument')} placeholder="EURUSD" className={inputCls} />
               </Field>
-              <Field label="Asset Class *">
-                <select value={form.assetClass} onChange={set('assetClass')} className={selectCls}>
-                  <option value="forex">Forex</option>
-                  <option value="stocks">US Stocks</option>
-                </select>
+              <Field label="Lot Size">
+                <input type="number" step="any" value={form.lotSize} onChange={set('lotSize')} placeholder="e.g. 0.5" className={inputCls} />
               </Field>
               <Field label="Direction *">
                 <select value={form.direction} onChange={set('direction')} className={selectCls}>
@@ -255,67 +271,84 @@ export default function NewTradePage() {
                   <option value="short">Short</option>
                 </select>
               </Field>
-              <Field label="Timeframe">
-                <select value={form.timeframe} onChange={set('timeframe')} className={selectCls}>
-                  <option value="">—</option>
-                  {['1M','5M','15M','1H','4H','D','W'].map((t) => <option key={t}>{t}</option>)}
+              <Field label="Asset Class *">
+                <select value={form.assetClass} onChange={set('assetClass')} className={selectCls}>
+                  <option value="forex">Forex</option>
+                  <option value="stocks">US Stocks / Futures</option>
+                  <option value="crypto">Crypto</option>
+                  <option value="commodities">Commodities</option>
                 </select>
-              </Field>
-              <Field label="Entry Price">
-                <input type="number" step="any" value={form.entryPrice} onChange={set('entryPrice')} className={inputCls} />
-              </Field>
-              <Field label="Stop Loss">
-                <input type="number" step="any" value={form.stopLoss} onChange={set('stopLoss')} className={inputCls} />
-              </Field>
-              <Field label="Take Profit 1">
-                <input type="number" step="any" value={form.takeProfit1} onChange={set('takeProfit1')} className={inputCls} />
-              </Field>
-              <Field label="Take Profit 2">
-                <input type="number" step="any" value={form.takeProfit2} onChange={set('takeProfit2')} className={inputCls} />
-              </Field>
-              <Field label="Lot Size">
-                <input type="number" step="any" value={form.lotSize} onChange={set('lotSize')} className={inputCls} />
-              </Field>
-              <Field label="Position Size ($)">
-                <input type="number" step="any" value={form.positionSize} onChange={set('positionSize')} className={inputCls} />
-              </Field>
-              <Field label="Entry Date">
-                <input type="datetime-local" value={form.entryDate} onChange={set('entryDate')} className={inputCls} />
-              </Field>
-              <Field label="Session">
-                <select value={form.session} onChange={set('session')} className={selectCls}>
-                  <option value="">—</option>
-                  {['London','NY','Asian','London/NY Overlap'].map((s) => <option key={s}>{s}</option>)}
-                </select>
-              </Field>
-              <Field label="Setup Type">
-                <input type="text" value={form.setupType} onChange={set('setupType')} placeholder="OB, FVG, BOS+MSS…" className={inputCls} />
-              </Field>
-              <Field label="Confluences (comma-separated)">
-                <input type="text" value={form.confluences} onChange={set('confluences')} placeholder="HTF OB, 0.79 fib, discount" className={inputCls} />
               </Field>
             </div>
 
+            {/* Outcome */}
             <div className="border-t border-gray-800 pt-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Outcome (fill after trade closes)</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Outcome</p>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Status">
                   <select value={form.status} onChange={set('status')} className={selectCls}>
-                    <option value="open">Open</option>
+                    <option value="open">Open (in progress)</option>
                     <option value="closed">Closed</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
                 </Field>
-                <Field label="Result">
-                  <select value={form.result} onChange={set('result')} className={selectCls}>
+                {form.status === 'closed' && (
+                  <>
+                    <Field label="Result">
+                      <select value={form.result} onChange={set('result')} className={selectCls}>
+                        <option value="">—</option>
+                        <option value="win">Win ✓</option>
+                        <option value="loss">Loss ✗</option>
+                        <option value="breakeven">Breakeven</option>
+                      </select>
+                    </Field>
+                    <Field label="Exit Price">
+                      <input type="number" step="any" value={form.exitPrice} onChange={set('exitPrice')} className={inputCls} />
+                    </Field>
+                    <Field label="P&L $">
+                      <input type="number" step="any" value={form.pnlDollars} onChange={set('pnlDollars')} className={inputCls} />
+                    </Field>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Advanced — collapsed, pre-filled by AI */}
+            <details className="border-t border-gray-800 pt-3">
+              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300 select-none">▸ Advanced fields (prices, setup, dates — pre-filled by AI)</summary>
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <Field label="Timeframe">
+                  <select value={form.timeframe} onChange={set('timeframe')} className={selectCls}>
                     <option value="">—</option>
-                    <option value="win">Win</option>
-                    <option value="loss">Loss</option>
-                    <option value="breakeven">Breakeven</option>
+                    {['1M','3M','5M','15M','1H','4H','D','W'].map((t) => <option key={t}>{t}</option>)}
                   </select>
                 </Field>
-                <Field label="Exit Price">
-                  <input type="number" step="any" value={form.exitPrice} onChange={set('exitPrice')} className={inputCls} />
+                <Field label="Session">
+                  <select value={form.session} onChange={set('session')} className={selectCls}>
+                    <option value="">—</option>
+                    {['London','NY','Asian','London/NY Overlap'].map((s) => <option key={s}>{s}</option>)}
+                  </select>
+                </Field>
+                <Field label="Entry Price">
+                  <input type="number" step="any" value={form.entryPrice} onChange={set('entryPrice')} className={inputCls} />
+                </Field>
+                <Field label="Stop Loss">
+                  <input type="number" step="any" value={form.stopLoss} onChange={set('stopLoss')} className={inputCls} />
+                </Field>
+                <Field label="Take Profit 1">
+                  <input type="number" step="any" value={form.takeProfit1} onChange={set('takeProfit1')} className={inputCls} />
+                </Field>
+                <Field label="Take Profit 2">
+                  <input type="number" step="any" value={form.takeProfit2} onChange={set('takeProfit2')} className={inputCls} />
+                </Field>
+                <Field label="Setup Type">
+                  <input type="text" value={form.setupType} onChange={set('setupType')} placeholder="OB, FVG, BOS+MSS…" className={inputCls} />
+                </Field>
+                <Field label="Confluences (comma-separated)">
+                  <input type="text" value={form.confluences} onChange={set('confluences')} placeholder="HTF OB, 0.79 fib, discount" className={inputCls} />
+                </Field>
+                <Field label="Entry Date">
+                  <input type="datetime-local" value={form.entryDate} onChange={set('entryDate')} className={inputCls} />
                 </Field>
                 <Field label="Exit Date">
                   <input type="datetime-local" value={form.exitDate} onChange={set('exitDate')} className={inputCls} />
@@ -323,11 +356,11 @@ export default function NewTradePage() {
                 <Field label="P&L Pips">
                   <input type="number" step="any" value={form.pnlPips} onChange={set('pnlPips')} className={inputCls} />
                 </Field>
-                <Field label="P&L Dollars">
-                  <input type="number" step="any" value={form.pnlDollars} onChange={set('pnlDollars')} className={inputCls} />
+                <Field label="Position Size ($)">
+                  <input type="number" step="any" value={form.positionSize} onChange={set('positionSize')} className={inputCls} />
                 </Field>
               </div>
-            </div>
+            </details>
 
             <div className="flex justify-between pt-2">
               <button onClick={() => setStep(0)} className="text-sm text-gray-400 hover:text-gray-200">← Back</button>

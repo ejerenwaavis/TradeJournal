@@ -53,7 +53,7 @@ Analyze this data and respond in clear Markdown with these sections:
 Be specific and reference actual setups, instruments, and patterns from the data. Keep total response under 600 words.`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       max_tokens: 800,
       messages: [{ role: 'user', content: prompt }],
     });

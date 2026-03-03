@@ -22,7 +22,7 @@ export default function DashboardPage() {
   }, []);
 
   const winPct = summary ? (summary.winRate * 100).toFixed(0) : '—';
-  const pnl = summary ? `$${summary.totalPnlDollars.toFixed(2)}` : '—';
+  const pnl = summary ? `$${(summary.totalPnlDollars ?? 0).toFixed(2)}` : '—';
   const avgRR = summary ? (summary.avgRR?.toFixed(2) ?? '—') : '—';
 
   return (
