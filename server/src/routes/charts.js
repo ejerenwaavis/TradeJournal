@@ -30,24 +30,46 @@ const TV_LINK_RE = /^https:\/\/www\.tradingview\.com\/x\/[a-zA-Z0-9]+\/?$/;
 
 const CHART_PROMPT = `You are an expert ICT (Inner Circle Trader) / SMC (Smart Money Concepts) trading analyst. Carefully study this chart screenshot and extract all visible trade information.
 
-WHAT TO LOOK FOR:
-- Instrument/ticker: shown top-left of chart (e.g. MNQ1!, ES1!, NQ1!, EURUSD, GBPUSD, BTCUSDT)
-- Timeframe: shown next to the ticker (1, 3, 5, 15, 1H, 4H, 1D, 1W)
-- Trade direction: arrows, entry markers, colored boxes/labels. Green/bullish = long, Red/bearish = short
-- Price levels: read the RIGHT-SIDE price axis. Entry, SL, and TP lines are often horizontal dashed/solid lines with price labels
-- ICT/SMC structures: Order Blocks (OB) = colored rectangles; Fair Value Gaps (FVG) = gaps between candles often highlighted; BOS/ChoCH/MSS = structural break labels on the chart
-- Session: time-based shading, background color bands, or text labels (London, NY, Asian, Overlap)
+== PRICE NOTE LABELS — HIGHEST PRIORITY ==
+Look for small BLACK or RED pill/bubble shaped labels with a short horizontal line pointing to a price level on the right-side axis. These are the most important elements on the chart. They are typically labeled:
+  "Entry" or "entry" — the trade entry price
+  "Stop Loss", "SL", "stop loss" — the stop loss price
+  "Take Profit", "TP", "TP1", "TP 1", "Take Profit 1" — first target
+  "Take Profit 2", "TP2", "TP 2" — second target (if present)
+Read the EXACT numeric price value printed inside or next to each bubble. These override any other price levels you see.
 
-ASSET CLASS RULES (critical — do not guess):
-- MNQ, NQ, ES, YM, RTY, MES, MYM (US index futures) → "stocks"
-- EUR/USD, GBP/JPY, AUD/CAD and other forex pairs → "forex"
-- BTC, ETH, SOL and other crypto → "crypto"
+== OTHER THINGS TO LOOK FOR ==
+- Instrument/ticker: shown top-left (e.g. MNQH2026, MNQ1!, ES1!, EURUSD)
+- Timeframe: shown next to ticker (1, 3, 5, 15, 1H, 4H, 1D)
+- Direction: green/upward = long, red/downward = short
+- ICT/SMC structures: Order Blocks (colored rectangles), FVG (highlighted gaps between candles), BOS/CHoCH/MSS labels, liquidity sweeps
+- Session labels or shaded time zones (London, NY Open, Asian)
+
+== ASSET CLASS RULES (never guess) ==
+- MNQ, NQ, MES, ES, YM, MYM, RTY (US index futures) → "stocks"
+- EUR/USD, GBP/JPY, AUD/CAD and all forex pairs → "forex"
+- BTC, ETH, SOL and crypto → "crypto"
 - GC (Gold), CL (Oil), SI (Silver) → "commodities"
-- If unknown, use null
+- Unknown → null
 
-Respond ONLY with valid JSON — no markdown fences, no text outside the JSON object:
+== HANDLES / POINTS CALCULATION ==
+After extracting entryPrice, stopLoss, takeProfit1:
+- For LONG trades:
+    pnlPips = takeProfit1 - entryPrice  (positive = gain)
+    riskPips = entryPrice - stopLoss
+- For SHORT trades:
+    pnlPips = entryPrice - takeProfit1  (positive = gain)
+    riskPips = stopLoss - entryPrice
+- riskReward = pnlPips / riskPips  (round to 2 decimal places)
+If you cannot determine direction or prices, set pnlPips and riskReward to null.
+
+== SESSION MAPPING ==
+Map what you see to one of these exact strings:
+"NY Premarket" (7:00–9:30 AM ET) | "NY Open" (9:30–11:30 AM ET) | "NY Lunch" (11:30 AM–1:30 PM ET) | "NY PM" (1:30–4:15 PM ET) | "London" (1:30–4:30 AM ET) | "Asian"
+
+Respond ONLY with valid JSON — no markdown fences, no extra text:
 {
-  "instrument": "ticker string or null",
+  "instrument": "ticker or null",
   "assetClass": "forex|stocks|crypto|commodities|null",
   "direction": "long|short|null",
   "timeframe": "1M|3M|5M|15M|1H|4H|D|W|null",
@@ -55,16 +77,31 @@ Respond ONLY with valid JSON — no markdown fences, no text outside the JSON ob
   "stopLoss": number or null,
   "takeProfit1": number or null,
   "takeProfit2": number or null,
-  "setupType": "describe the setup pattern visible (e.g. FVG, OB, BOS+MSS, ChoCH+OB, Liquidity Sweep) or null",
-  "confluences": ["list every confluence you can identify from the chart"],
-  "session": "London|NY|Asian|London/NY Overlap|null",
-  "notes": "one concise sentence about the key context or trade narrative visible on the chart, or null"
+  "pnlPips": number or null,
+  "riskReward": number or null,
+  "setupType": "setup pattern (e.g. FVG, OB, BOS+MSS, ChoCH+OB, Liquidity Sweep) or null",
+  "confluences": ["every ICT/SMC confluence visible"],
+  "session": "NY Premarket|NY Open|NY Lunch|NY PM|London|Asian|null",
+  "notes": "one concise sentence about the trade narrative, or null"
 }`;
+
+// Compute pnlPips / riskReward server-side as a fallback
+function calcHandles(parsed) {
+  const { entryPrice, stopLoss, takeProfit1, direction } = parsed;
+  if (!entryPrice || !takeProfit1 || !direction) return parsed;
+  const isLong = direction === 'long';
+  const pnlPips = parsed.pnlPips != null ? parsed.pnlPips
+    : parseFloat((isLong ? takeProfit1 - entryPrice : entryPrice - takeProfit1).toFixed(2));
+  const riskPips = stopLoss ? Math.abs(entryPrice - stopLoss) : null;
+  const riskReward = parsed.riskReward != null ? parsed.riskReward
+    : (riskPips && riskPips > 0 ? parseFloat((pnlPips / riskPips).toFixed(2)) : null);
+  return { ...parsed, pnlPips, riskReward };
+}
 
 async function analyzeImageUrl(imageUrl) {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    max_tokens: 1200,
+    model: 'gpt-4o',
+    max_tokens: 1500,
     messages: [
       {
         role: 'user',
@@ -78,11 +115,15 @@ async function analyzeImageUrl(imageUrl) {
 
   const raw = response.choices[0].message.content.trim();
   try {
-    return { parsed: JSON.parse(raw), raw };
+    const parsed = JSON.parse(raw);
+    return { parsed: calcHandles(parsed), raw };
   } catch {
     // GPT occasionally wraps in ```json ... ```
     const match = raw.match(/\{[\s\S]*\}/);
-    if (match) return { parsed: JSON.parse(match[0]), raw };
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return { parsed: calcHandles(parsed), raw };
+    }
     return { parsed: null, raw };
   }
 }

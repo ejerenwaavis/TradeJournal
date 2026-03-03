@@ -49,7 +49,12 @@ router.get('/summary', async (req, res) => {
       },
     ]);
 
-    res.json({ summary: summary || { totalTrades: 0, wins: 0, losses: 0, winRate: 0 } });
+    // Open trades count (not affected by date filter)
+    const openTrades = await Trade.countDocuments({ userId, status: 'open' });
+
+    res.json({ summary: summary
+      ? { ...summary, openTrades }
+      : { totalTrades: 0, wins: 0, losses: 0, winRate: 0, openTrades } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

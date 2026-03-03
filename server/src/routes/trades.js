@@ -8,11 +8,13 @@ router.use(auth);
 // GET /api/trades
 router.get('/', async (req, res) => {
   try {
-    const { month, result, setup, page = 1, limit = 50 } = req.query;
+    const { month, result, setup, instrument, status, page = 1, limit = 50 } = req.query;
     const filter = { userId: req.userId };
 
-    if (result) filter.result = result;
-    if (setup) filter.setupType = { $regex: setup, $options: 'i' };
+    if (result)     filter.result     = result;
+    if (status)     filter.status     = status;
+    if (setup)      filter.setupType  = { $regex: setup,      $options: 'i' };
+    if (instrument) filter.instrument = { $regex: instrument, $options: 'i' };
     if (month) {
       const [year, m] = month.split('-').map(Number);
       const start = new Date(year, m - 1, 1);

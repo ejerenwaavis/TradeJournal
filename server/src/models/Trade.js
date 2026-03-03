@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 
 const chartSchema = new mongoose.Schema({
   label: { type: String, default: '' }, // e.g. "Entry", "Higher TF"
@@ -42,7 +42,7 @@ const tradeSchema = new mongoose.Schema(
     // Setup
     setupType: { type: String, default: '' }, // OB, FVG, BOS+MSS, etc.
     confluences: [{ type: String }],
-    session: { type: String, enum: ['London', 'NY', 'Asian', 'London/NY Overlap', ''], default: '' },
+    session: { type: String, enum: ['NY Premarket', 'NY Open', 'NY Lunch', 'NY PM', 'London', 'Asian', 'London', 'NY', 'London/NY Overlap', ''], default: '' },
 
     // Emotion & execution
     emotionPreTrade: {
