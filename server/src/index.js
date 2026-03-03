@@ -3,6 +3,12 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+// Patch all console methods with timestamps
+['log', 'error', 'warn', 'info'].forEach((method) => {
+  const orig = console[method].bind(console);
+  console[method] = (...args) => orig(`[${new Date().toISOString()}]`, ...args);
+});
+
 const authRoutes = require('./routes/auth');
 const socialAuthRoutes = require('./routes/socialAuth');
 const tradeRoutes = require('./routes/trades');
@@ -32,10 +38,14 @@ app.use('/api/backtest-projects', backtestProjectRoutes);
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
-    console.log('MongoDB connected');
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    console.log('MongoDB connected successfully');
+    console.log(`Node.js ${process.version} | ENV: ${process.env.NODE_ENV || 'development'}`);
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+    });
   })
   .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
+    console.error('MongoDB connection FAILED:', err.message);
     process.exit(1);
   });
