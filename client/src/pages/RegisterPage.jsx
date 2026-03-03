@@ -18,7 +18,7 @@ export default function RegisterPage() {
     try {
       const { data } = await api.post('/auth/register', form);
       login(data.token, data.user);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Registration failed');
     } finally {
@@ -80,7 +80,7 @@ export default function RegisterPage() {
           <div className="flex-1 h-px bg-gray-800" />
         </div>
 
-        <SocialAuthButtons onSuccess={() => navigate('/')} />
+        <SocialAuthButtons onSuccess={() => navigate('/dashboard')} />
 
         <p className="text-center text-xs text-gray-500 mt-4">
           Already registered?{' '}

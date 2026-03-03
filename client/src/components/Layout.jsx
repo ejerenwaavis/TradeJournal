@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const links = [
-  { to: '/', icon: HomeIcon, label: 'Dashboard' },
+  { to: '/dashboard', icon: HomeIcon, label: 'Dashboard' },
   { to: '/trades/new', icon: PlusCircleIcon, label: 'New Trade' },
   { to: '/trades', icon: TableCellsIcon, label: 'Trade Log' },
   { to: '/analytics', icon: ChartBarIcon, label: 'Analytics' },
@@ -49,7 +49,7 @@ export default function Layout({ children }) {
             <NavLink
               key={to}
               to={to}
-              end={to === '/'}
+              end={to === '/dashboard'}
               title={label}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors overflow-hidden ${

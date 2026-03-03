@@ -17,7 +17,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.post('/auth/login', form);
       login(data.token, data.user);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Login failed');
     } finally {
@@ -68,7 +68,7 @@ export default function LoginPage() {
           <div className="flex-1 h-px bg-gray-800" />
         </div>
 
-        <SocialAuthButtons onSuccess={() => navigate('/')} />
+        <SocialAuthButtons onSuccess={() => navigate('/dashboard')} />
 
         <p className="text-center text-xs text-gray-500 mt-4">
           No account?{' '}

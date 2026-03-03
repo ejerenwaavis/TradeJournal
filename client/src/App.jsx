@@ -17,6 +17,7 @@ import BacktestPage from './pages/BacktestPage';
 import BacktestProjectsPage from './pages/BacktestProjectsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
+import LandingPage from './pages/LandingPage';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -37,6 +38,7 @@ export default function App() {
           }}
         />
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
@@ -47,7 +49,7 @@ export default function App() {
               <RequireAuth>
                 <Layout>
                   <Routes>
-                    <Route path="/" element={<DashboardPage />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/trades" element={<TradeLogPage />} />
                     <Route path="/trades/new" element={<NewTradePage />} />
                     <Route path="/trades/:id" element={<TradeDetailPage />} />
@@ -55,7 +57,7 @@ export default function App() {
                     <Route path="/insights" element={<InsightsPage />} />
                     <Route path="/backtests" element={<BacktestPage />} />
                     <Route path="/backtests/projects" element={<BacktestProjectsPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Routes>
                 </Layout>
               </RequireAuth>
