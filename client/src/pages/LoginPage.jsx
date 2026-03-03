@@ -74,6 +74,12 @@ export default function LoginPage() {
           No account?{' '}
           <Link to="/register" className="text-indigo-400 hover:underline">Register</Link>
         </p>
+
+        <p className="text-center text-xs text-gray-600 mt-5 space-x-3">
+          <Link to="/privacy-policy" className="hover:text-gray-400 transition-colors">Privacy Policy</Link>
+          <span>·</span>
+          <Link to="/terms-of-use" className="hover:text-gray-400 transition-colors">Terms of Use</Link>
+        </p>
       </div>
     </div>
   );
