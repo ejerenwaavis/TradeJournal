@@ -37,8 +37,6 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/backtest-projects', backtestProjectRoutes);
 
-app.use('/api/backtest-projects', backtestProjectRoutes);
-
 // ── Serve React frontend (production / Namecheap Passenger) ──────────────────
 // Repo layout: server/src/index.js  →  ../../public_html
 const FRONTEND_DIR = path.resolve(__dirname, '../../public_html');
