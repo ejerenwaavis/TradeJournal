@@ -36,27 +36,40 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/backtest-projects', backtestProjectRoutes);
 
+app.use('/api/backtest-projects', backtestProjectRoutes);
+
 // ── Serve React frontend (production / Namecheap Passenger) ──────────────────
-// public_html is two levels up from server/src/
-const FRONTEND_DIR = path.join(__dirname, '../../public_html');
+// Repo layout: server/src/index.js  →  ../../public_html
+const FRONTEND_DIR = path.resolve(__dirname, '../../public_html');
 app.use(express.static(FRONTEND_DIR));
 
-// For any non-API route return index.html so React Router works
-app.get('*', (req, res) => {
+// SPA catch-all — must come after all /api routes
+app.get('*', (_req, res) => {
   res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
 });
 
+// ── Database + server start ───────────────────────────────────────────────────
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected successfully');
     console.log(`Node.js ${process.version} | ENV: ${process.env.NODE_ENV || 'development'}`);
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
-    });
+    console.log(`Frontend dir: ${FRONTEND_DIR}`);
+
+    // Under Namecheap Passenger, the port is managed externally — don't call listen()
+    if (process.env.PASSENGER_BASE_URI !== undefined || process.env.IN_PASSENGER === '1') {
+      console.log('Running under Passenger — skipping app.listen()');
+    } else {
+      app.listen(PORT, () => {
+        console.log(`Server listening on port ${PORT}`);
+        console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+      });
+    }
   })
   .catch((err) => {
     console.error('MongoDB connection FAILED:', err.message);
     process.exit(1);
   });
+
+// Passenger requires the app to be exported
+module.exports = app;
