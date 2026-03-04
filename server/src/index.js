@@ -19,7 +19,8 @@ const insightsRoutes = require('./routes/insights');
 const backtestProjectRoutes = require('./routes/backtest-projects');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+// Passenger injects PORT dynamically — never hardcode a fallback
+const PORT = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
@@ -56,15 +57,11 @@ mongoose
     console.log(`Node.js ${process.version} | ENV: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Frontend dir: ${FRONTEND_DIR}`);
 
-    // Under Namecheap Passenger, the port is managed externally — don't call listen()
-    if (process.env.PASSENGER_BASE_URI !== undefined || process.env.IN_PASSENGER === '1') {
-      console.log('Running under Passenger — skipping app.listen()');
-    } else {
-      app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-        console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
-      });
-    }
+    // Passenger sets PORT dynamically — always listen on whatever port it provides
+    app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+      console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+    });
   })
   .catch((err) => {
     console.error('MongoDB connection FAILED:', err.message);
