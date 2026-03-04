@@ -5,3 +5,5 @@ node_modules/
 server/dist/
 *.log
 .DS_Store
+# Namecheap Passenger manages this file — don't overwrite it from git
+public_html/.htaccess

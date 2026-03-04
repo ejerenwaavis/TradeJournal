@@ -1,3 +1,0 @@
-# Passenger owns all requests at /.
-# SPA routing is handled by app.get('*') in server/src/index.js.
-# No Apache RewriteRules needed here.
