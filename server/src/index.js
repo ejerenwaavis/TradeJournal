@@ -2,6 +2,7 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const path = require('path');
 
 // Patch all console methods with timestamps
 ['log', 'error', 'warn', 'info'].forEach((method) => {
@@ -34,6 +35,16 @@ app.use('/api/charts', chartRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/backtest-projects', backtestProjectRoutes);
+
+// ── Serve React frontend (production / Namecheap Passenger) ──────────────────
+// public_html is two levels up from server/src/
+const FRONTEND_DIR = path.join(__dirname, '../../public_html');
+app.use(express.static(FRONTEND_DIR));
+
+// For any non-API route return index.html so React Router works
+app.get('*', (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+});
 
 mongoose
   .connect(process.env.MONGODB_URI)
