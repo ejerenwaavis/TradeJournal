@@ -19,15 +19,25 @@ const insightsRoutes = require('./routes/insights');
 const backtestProjectRoutes = require('./routes/backtest-projects');
 
 const app = express();
-// Passenger injects PORT dynamically — never hardcode a fallback
-const PORT = process.env.PORT;
+// Passenger injects PORT dynamically; fallback to 5000 for local dev
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// Health check â€” available at both /health and /api/health
-app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }));
+// Health check — includes DB readyState to diagnose connection issues
+// readyState: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+app.get('/health', (_req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStateLabel = ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState] || 'unknown';
+  res.json({
+    status: 'ok',
+    ts: new Date().toISOString(),
+    db: dbStateLabel,
+    mongoUriSet: !!process.env.MONGODB_URI,
+  });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', socialAuthRoutes);
@@ -48,23 +58,26 @@ app.get('*', (_req, res) => {
 });
 
 // ── Database + server start ───────────────────────────────────────────────────
+console.log(`MONGODB_URI configured: ${!!process.env.MONGODB_URI}`);
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected successfully');
     console.log(`Node.js ${process.version} | ENV: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Frontend dir: ${FRONTEND_DIR}`);
-
-    // Passenger sets PORT dynamically — always listen on whatever port it provides
-    app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
-      console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
-    });
   })
   .catch((err) => {
+    // Log the error but do NOT exit — Passenger must keep running so /health still responds
     console.error('MongoDB connection FAILED:', err.message);
-    process.exit(1);
   });
+
+// Listen immediately — do not gate on MongoDB connect
+// Passenger may use module.exports instead, but calling listen is harmless and ensures local dev works
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+  console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+});
 
 // Passenger requires the app to be exported
 module.exports = app;
