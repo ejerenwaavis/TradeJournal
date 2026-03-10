@@ -8,13 +8,14 @@ router.use(auth);
 // GET /api/trades
 router.get('/', async (req, res) => {
   try {
-    const { month, result, setup, instrument, status, page = 1, limit = 50 } = req.query;
+    const { month, result, setup, instrument, status, hasCharts, sortBy, page = 1, limit = 50 } = req.query;
     const filter = { userId: req.userId };
 
     if (result)     filter.result     = result;
     if (status)     filter.status     = status;
     if (setup)      filter.setupType  = { $regex: setup,      $options: 'i' };
     if (instrument) filter.instrument = { $regex: instrument, $options: 'i' };
+    if (hasCharts === 'true') filter['charts.0'] = { $exists: true };
     if (month) {
       const [year, m] = month.split('-').map(Number);
       const start = new Date(year, m - 1, 1);
@@ -22,9 +23,10 @@ router.get('/', async (req, res) => {
       filter.entryDate = { $gte: start, $lt: end };
     }
 
+    const sortOrder = sortBy === 'executionRating' ? { executionRating: -1, entryDate: -1 } : { entryDate: -1 };
     const skip = (Number(page) - 1) * Number(limit);
     const [trades, total] = await Promise.all([
-      Trade.find(filter).sort({ entryDate: -1 }).skip(skip).limit(Number(limit)),
+      Trade.find(filter).sort(sortOrder).skip(skip).limit(Number(limit)),
       Trade.countDocuments(filter),
     ]);
 

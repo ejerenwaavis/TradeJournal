@@ -41,7 +41,7 @@ Read the EXACT numeric price value printed inside or next to each bubble. These 
 == OTHER THINGS TO LOOK FOR ==
 - Instrument/ticker: shown top-left (e.g. MNQH2026, MNQ1!, ES1!, EURUSD)
 - Timeframe: shown next to ticker (1, 3, 5, 15, 1H, 4H, 1D)
-- Direction: green/upward = long, red/downward = short
+- Direction: stoploss below entry/green/upward = long, stoploss above entry/red/downward = short
 - ICT/SMC structures: Order Blocks (colored rectangles), FVG (highlighted gaps between candles), BOS/CHoCH/MSS labels, liquidity sweeps
 - Session labels or shaded time zones (London, NY Open, Asian)
 

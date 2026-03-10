@@ -8,6 +8,7 @@ import {
   ChartBarIcon,
   SparklesIcon,
   BeakerIcon,
+  RectangleStackIcon,
   ArrowRightStartOnRectangleIcon,
   SunIcon,
   MoonIcon,
@@ -20,6 +21,7 @@ const links = [
   { to: '/analytics', icon: ChartBarIcon, label: 'Analytics' },
   { to: '/insights', icon: SparklesIcon, label: 'AI Insights' },
   { to: '/backtests', icon: BeakerIcon, label: 'Backtesting' },
+  { to: '/flashcards', icon: RectangleStackIcon, label: 'Flashcards' },
 ];
 
 export default function Layout({ children }) {
