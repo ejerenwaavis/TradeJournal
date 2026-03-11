@@ -43,7 +43,8 @@ export default function DashboardPage() {
 
   const winPct = summary ? (summary.winRate * 100).toFixed(0) : '—';
   const avgRR = summary ? (summary.avgRR?.toFixed(2) ?? '—') : '—';
-  const totalPts = summary ? (summary.totalPnlPips != null ? `${summary.totalPnlPips > 0 ? '+' : ''}${summary.totalPnlPips}` : '—') : '—';
+  const fmtPts = (n) => (Math.round(n * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+  const totalPts = summary ? (summary.totalPnlPips != null ? `${summary.totalPnlPips > 0 ? '+' : ''}${fmtPts(summary.totalPnlPips)}` : '—') : '—';
   const ptsClass = summary?.totalPnlPips > 0 ? 'text-emerald-400' : summary?.totalPnlPips < 0 ? 'text-rose-400' : 'text-gray-100';
   const streak = computeStreak(recentTrades);
 
@@ -139,7 +140,7 @@ export default function DashboardPage() {
                   <span className={`text-sm font-medium ${
                     t.pnlPips > 0 ? 'text-emerald-400' : t.pnlPips < 0 ? 'text-rose-400' : 'text-gray-400'
                   }`}>
-                    {t.pnlPips > 0 ? '+' : ''}{t.pnlPips} pts
+                    {t.pnlPips > 0 ? '+' : ''}{fmtPts(t.pnlPips)} pts
                   </span>
                 )}
                 <div className="text-right">
