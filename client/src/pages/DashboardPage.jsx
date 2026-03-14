@@ -4,10 +4,12 @@ import api from '../utils/api';
 import { SkeletonStatCard, SkeletonTradeRow } from '../components/Skeleton';
 
 function StatCard({ label, value, sub, valueClass = 'text-gray-100' }) {
+  const len = String(value).length;
+  const sizeClass = len <= 6 ? 'text-3xl' : len <= 9 ? 'text-2xl' : 'text-xl';
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 min-w-0">
       <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${valueClass}`}>{value}</p>
+      <p className={`${sizeClass} font-bold truncate ${valueClass}`} title={String(value)}>{value}</p>
       {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
     </div>
   );
