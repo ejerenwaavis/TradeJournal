@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 /*
-  @theme inline makes Tailwind emit var(--color-gray-*) in utility classes
-  instead of baking in the resolved value. This allows the [data-theme="light"]
-  selector below to override the variables at runtime.
+  @theme (without inline) makes Tailwind generate CSS custom properties on :root
+  AND emit var(--color-gray-*) references in utility classes.
+  This allows the [data-theme="light"] selector below to override the variables at runtime.
 */
-@theme inline {
+@theme {
   --color-gray-50:  oklch(0.985 0.002 247.839);
   --color-gray-100: oklch(0.967 0.003 264.542);
   --color-gray-200: oklch(0.928 0.006 264.531);
