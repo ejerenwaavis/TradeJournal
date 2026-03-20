@@ -174,7 +174,7 @@ export default function NewTradePage() {
             <button
               onClick={() => i < step && setStep(i)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                i === step ? 'bg-indigo-600 text-white' : i < step ? 'bg-indigo-900 text-indigo-300 cursor-pointer' : 'bg-gray-800 text-gray-500 cursor-default'
+                i === step ? 'bg-indigo-600 text-white' : i < step ? 'bg-indigo-600/20 text-indigo-400 cursor-pointer hover:bg-indigo-600/30' : 'bg-gray-800 text-gray-400 cursor-default'
               }`}
             >
               <span className="w-4 h-4 rounded-full border flex items-center justify-center text-xs" style={{ borderColor: 'currentColor' }}>{i + 1}</span>
