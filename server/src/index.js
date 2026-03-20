@@ -74,10 +74,23 @@ mongoose
 
 // Listen immediately — do not gate on MongoDB connect
 // Passenger may use module.exports instead, but calling listen is harmless and ensures local dev works
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-  console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
-});
+const startServer = (port) => {
+  const server = app.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+    console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`Port ${port} is busy, trying port ${port + 1}...`);
+      startServer(port + 1);
+      return;
+    }
+    throw err;
+  });
+};
+
+startServer(PORT);
 
 // Passenger requires the app to be exported
 module.exports = app;
