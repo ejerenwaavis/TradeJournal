@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
+import api from '../utils/api';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -61,10 +61,16 @@ export default function FlashcardsPage() {
   const [isShuffled,   setIsShuffled]   = useState(false);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
+  const navigate = useNavigate();
+
   useEffect(() => {
+    if (!localStorage.getItem('tj_token')) {
+      navigate('/login');
+      return;
+    }
     setLoading(true);
-    axios
-      .get('/api/trades?hasCharts=true&sortBy=executionRating&limit=200')
+    api
+      .get('/trades?hasCharts=true&sortBy=executionRating&limit=200')
       .then(({ data }) => {
         setAllTrades(data.trades || []);
       })
