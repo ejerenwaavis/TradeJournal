@@ -91,3 +91,23 @@ button {
 [data-theme="light"] a:hover {
   color: #4338ca;
 }
+
+/* Ensure active buttons/links are always high-contrast in light theme */
+[data-theme="light"] .bg-indigo-600,
+[data-theme="light"] .bg-indigo-500,
+[data-theme="light"] .bg-indigo-700,
+[data-theme="light"] .bg-blue-600,
+[data-theme="light"] .bg-blue-500,
+[data-theme="light"] .bg-blue-700 {
+  color: #ffffff !important;
+}
+
+[data-theme="light"] .bg-indigo-600:hover,
+[data-theme="light"] .bg-indigo-500:hover,
+[data-theme="light"] .bg-indigo-700:hover,
+[data-theme="light"] .bg-blue-600:hover,
+[data-theme="light"] .bg-blue-500:hover,
+[data-theme="light"] .bg-blue-700:hover {
+  color: #ffffff !important;
+}
+
