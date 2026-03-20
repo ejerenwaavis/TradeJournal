@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
+import api from '../utils/api';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -63,8 +63,8 @@ export default function FlashcardsPage() {
   // ── fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true);
-    axios
-      .get('/api/trades?hasCharts=true&sortBy=executionRating&limit=200')
+    api
+      .get('/trades?hasCharts=true&sortBy=executionRating&limit=200')
       .then(({ data }) => {
         setAllTrades(data.trades || []);
       })
