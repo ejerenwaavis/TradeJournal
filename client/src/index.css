@@ -84,3 +84,15 @@ button:focus-visible {
   --toast-color: #0f172a;
   --toast-border: #e2e8f0;
 }
+
+/* ── Light theme text legibility fixes ── */
+/* The gray scale inversion makes gray-100 very dark, so text-gray-100 becomes
+   near-black on a near-white background — which is correct and readable.
+   However some hardcoded light-specific overrides are needed for elements
+   that use gray colours for both background AND text at similar values. */
+[data-theme="light"] a {
+  color: #4f46e5;
+}
+[data-theme="light"] a:hover {
+  color: #4338ca;
+}

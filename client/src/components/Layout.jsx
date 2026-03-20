@@ -51,7 +51,7 @@ export default function Layout({ children }) {
             <NavLink
               key={to}
               to={to}
-              end={to === '/dashboard'}
+              end={to === '/dashboard' || to === '/trades' || to === '/backtests'}
               title={label}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors overflow-hidden ${
