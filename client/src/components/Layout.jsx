@@ -55,7 +55,9 @@ export default function Layout({ children }) {
               title={label}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors overflow-hidden ${
-                  isActive ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
+                  isActive
+                    ? 'bg-indigo-600 text-white !text-white border border-indigo-500'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
                 }`
               }
             >
