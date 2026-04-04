@@ -49,6 +49,7 @@ export default function BacktestPage() {
 
   const [form, setForm]       = useState({ ...BLANK, entryDate: toLocalISO(), exitDate: toLocalISO() });
   const [tvLink, setTvLink]   = useState('');
+  const [chartImageUrl, setChartImageUrl] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
   const [saving, setSaving]   = useState(false);
@@ -94,6 +95,7 @@ export default function BacktestPage() {
       const r = data.parsed;
       if (r) {
         setAiPreview(r);
+        setChartImageUrl(data.imageUrl || '');
         const ok = (v) => v && v !== 'null' ? v : null;
         setForm((f) => ({
           ...f,
@@ -127,6 +129,7 @@ export default function BacktestPage() {
       const r = data.parsed;
       if (r) {
         setAiPreview(r);
+        setChartImageUrl(data.imageUrl || '');
         const ok = (v) => v && v !== 'null' ? v : null;
         setForm((f) => ({
           ...f,
@@ -156,7 +159,7 @@ export default function BacktestPage() {
         tradeType: 'backtest',
         status: form.result ? 'closed' : 'open',
         ...(projectId ? { projectId } : {}),
-        ...(tvLink ? { charts: [{ label: 'Entry', tvLink, imageUrl: aiPreview ? '' : '', aiRaw: aiPreview }] } : {}),
+        ...((tvLink || chartImageUrl) ? { charts: [{ label: 'Entry', tvLink: tvLink || '', imageUrl: chartImageUrl, aiRaw: aiPreview }] } : {}),
       };
       // Strip empty strings
       Object.keys(payload).forEach((k) => { if (payload[k] === '') delete payload[k]; });
@@ -166,6 +169,7 @@ export default function BacktestPage() {
       const keepFields = { instrument: form.instrument, session: form.session, htfBias: form.htfBias, timeframe: form.timeframe, account: form.account };
       setForm({ ...BLANK, ...keepFields, entryDate: toLocalISO(), exitDate: toLocalISO() });
       setTvLink('');
+      setChartImageUrl('');
       setAiPreview(null);
       loadRecent();
     } catch (err) {

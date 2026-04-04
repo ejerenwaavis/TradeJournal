@@ -43,6 +43,7 @@ export default function TradeDetailPage() {
   const [saving, setSaving] = useState(false);
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [reanalyzing, setReanalyzing] = useState(null);
+  const [loadingChart, setLoadingChart] = useState(null);
   const fileRef = useRef();
   const [fileChartIdx, setFileChartIdx] = useState(null);
 
@@ -80,6 +81,27 @@ export default function TradeDetailPage() {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
   const updateEditChart = (i, key, val) =>
     setEditCharts((cs) => cs.map((c, idx) => (idx === i ? { ...c, [key]: val } : c)));
+
+  // For backtest trades saved before the imageUrl fix — fetch the image and persist it
+  const loadChartImage = async (chartIdx) => {
+    const tvLink = trade.charts[chartIdx]?.tvLink;
+    if (!tvLink) return;
+    setLoadingChart(chartIdx);
+    try {
+      const { data } = await api.post('/charts/analyze', { tvLink });
+      if (!data.imageUrl) { toast.error('Could not load chart image'); return; }
+      // Patch the trade so the image is saved permanently
+      const updatedCharts = trade.charts.map((c, idx) =>
+        idx === chartIdx ? { ...c, imageUrl: data.imageUrl } : c
+      );
+      const { data: patchData } = await api.patch(`/trades/${id}`, { charts: updatedCharts });
+      setTrade(patchData.trade);
+      setEditCharts(patchData.trade.charts?.length ? [...patchData.trade.charts] : [blankChart()]);
+      toast.success('Chart loaded');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to load chart');
+    } finally { setLoadingChart(null); }
+  };
 
   const reanalyzeChart = async (i) => {
     if (!editCharts[i].tvLink) { toast.error('Paste a TradingView link first'); return; }
@@ -146,8 +168,11 @@ export default function TradeDetailPage() {
 
   const resultColor = { win: 'text-emerald-400', loss: 'text-rose-400', breakeven: 'text-yellow-400' }[trade.result] || 'text-gray-400';
   const fmt = (v) => v != null ? v : '—';
-  const validCharts = trade.charts?.filter((c) => c.imageUrl) ?? [];
-  const lbChart = lightboxIdx !== null ? validCharts[lightboxIdx] : null;
+  // Include charts with tvLink even if imageUrl is missing (backtest trades saved before the fix)
+  const validCharts = trade.charts?.filter((c) => c.imageUrl || c.tvLink) ?? [];
+  // Lightbox only works on charts that already have an image
+  const imgCharts = trade.charts?.filter((c) => c.imageUrl) ?? [];
+  const lbChart = lightboxIdx !== null ? imgCharts[lightboxIdx] : null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -187,20 +212,36 @@ export default function TradeDetailPage() {
       {/* â”€â”€ Charts: read mode thumbnails â”€â”€ */}
       {!editing && validCharts.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {validCharts.map((c, i) => (
+          {validCharts.map((c, i) => {
+            const hasImage = !!c.imageUrl;
+            const tradeChartIdx = trade.charts.indexOf(c);
+            return (
             <div
               key={i}
-              className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden cursor-zoom-in hover:border-indigo-600 transition-colors group"
-              onClick={() => setLightboxIdx(i)}
+              className={`bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-indigo-600 transition-colors group ${hasImage ? 'cursor-zoom-in' : ''}`}
+              onClick={() => hasImage ? setLightboxIdx(imgCharts.indexOf(c)) : undefined}
             >
               <p className="text-xs text-gray-500 px-3 py-1.5 border-b border-gray-800 flex items-center justify-between">
                 <span>{c.label || `Chart ${i + 1}`}</span>
-                <span className="opacity-0 group-hover:opacity-100 text-indigo-400 transition-opacity">â¤¢ expand</span>
+                {hasImage && <span className="opacity-0 group-hover:opacity-100 text-indigo-400 transition-opacity">⤢ expand</span>}
               </p>
-              <div className="relative">
-                <img src={c.imageUrl} alt={c.label} className="w-full object-contain max-h-52" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
-              </div>
+              {hasImage ? (
+                <div className="relative">
+                  <img src={c.imageUrl} alt={c.label} className="w-full object-contain max-h-52" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all" />
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-2 py-8 px-4">
+                  <p className="text-xs text-gray-500">Chart image not loaded</p>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); loadChartImage(tradeChartIdx); }}
+                    disabled={loadingChart === tradeChartIdx}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {loadingChart === tradeChartIdx ? 'Loading…' : 'Load chart image'}
+                  </button>
+                </div>
+              )}
               {c.tvLink && (
                 <a
                   href={c.tvLink}
@@ -213,7 +254,8 @@ export default function TradeDetailPage() {
                 </a>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
