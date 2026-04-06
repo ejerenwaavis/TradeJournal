@@ -536,8 +536,9 @@ export default function StudyCompanionPage() {
   useEffect(() => {
     api.get('/study/topics')
       .then(({ data }) => {
-        setTopics(data.topics);
-        setActiveTopic((prev) => prev ?? (data.topics[0] || null));
+        const topicList = data.topics || [];
+        setTopics(topicList);
+        setActiveTopic((prev) => prev ?? (topicList[0] || null));
       })
       .catch(() => toast.error('Failed to load topics'))
       .finally(() => setLoadingTopics(false));
