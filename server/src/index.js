@@ -81,7 +81,7 @@ mongoose
 const startServer = (port) => {
   const server = app.listen(port, () => {
     console.log(`Server listening on port ${port}`);
-    console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects');
+    console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects /api/study /api/backup');
   });
 
   server.on('error', (err) => {
