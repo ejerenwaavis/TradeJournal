@@ -19,6 +19,9 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfUsePage from './pages/TermsOfUsePage';
 import LandingPage from './pages/LandingPage';
 import FlashcardsPage from './pages/FlashcardsPage';
+import StudyCompanionPage from './pages/StudyCompanionPage';
+import StudyAnalyticsPage from './pages/StudyAnalyticsPage';
+import SettingsPage from './pages/SettingsPage';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -59,6 +62,9 @@ export default function App() {
                     <Route path="/backtests" element={<BacktestPage />} />
                     <Route path="/backtests/projects" element={<BacktestProjectsPage />} />
                     <Route path="/flashcards" element={<FlashcardsPage />} />
+                    <Route path="/study" element={<StudyCompanionPage />} />
+                    <Route path="/study/analytics" element={<StudyAnalyticsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Routes>
                 </Layout>

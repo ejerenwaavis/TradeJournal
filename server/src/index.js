@@ -17,6 +17,8 @@ const chartRoutes = require('./routes/charts');
 const analyticsRoutes = require('./routes/analytics');
 const insightsRoutes = require('./routes/insights');
 const backtestProjectRoutes = require('./routes/backtest-projects');
+const studyCompanionRoutes = require('./routes/studyCompanion');
+const backupRoutes = require('./routes/backup');
 
 const app = express();
 // Passenger injects PORT dynamically; fallback to 5000 for local dev
@@ -46,6 +48,8 @@ app.use('/api/charts', chartRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/backtest-projects', backtestProjectRoutes);
+app.use('/api/study', studyCompanionRoutes);
+app.use('/api/backup', backupRoutes);
 
 // ── Serve React frontend (production / Namecheap Passenger) ──────────────────
 // Repo layout: server/src/index.js  →  ../../public_html
