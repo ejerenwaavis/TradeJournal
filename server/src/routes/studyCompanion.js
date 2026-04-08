@@ -42,9 +42,9 @@ router.get('/topics', auth, async (req, res) => {
 // POST /api/study/topics
 router.post('/topics', auth, async (req, res) => {
   try {
-    const { name, description, tags, color } = req.body;
+    const { name, description, tags, color, masterRules } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Topic name is required' });
-    const topic = await StudyTopic.create({ userId: req.userId, name: name.trim(), description, tags, color });
+    const topic = await StudyTopic.create({ userId: req.userId, name: name.trim(), description, tags, color, masterRules });
     res.status(201).json({ topic });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -63,6 +63,35 @@ router.put('/topics/:id', auth, async (req, res) => {
     res.json({ topic });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/study/topics/:id/promote-discovery — promote a discovery text to a master rule
+router.post('/topics/:id/promote-discovery', auth, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ error: 'Discovery text required' });
+
+    const topic = await StudyTopic.findOne({ _id: req.params.id, userId: req.userId });
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+
+    const trimmed = text.trim();
+    const existingTexts = (topic.masterRules || []).map(r => (typeof r === 'string' ? r : r.text));
+    if (!existingTexts.includes(trimmed)) {
+      topic.masterRules = [...(topic.masterRules || []), { text: trimmed, subs: [] }];
+      await topic.save();
+    }
+
+    // Mark matching discoveries as promoted across all setups in this topic
+    await StudySetup.updateMany(
+      { topicId: req.params.id, userId: req.userId, 'discoveries.text': trimmed },
+      { $set: { 'discoveries.$[elem].promoted': true } },
+      { arrayFilters: [{ 'elem.text': trimmed }] }
+    );
+
+    res.json({ topic });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -197,7 +226,67 @@ router.get('/analytics/:topicId', auth, async (req, res) => {
     setups.forEach((s) => { if (s.timeOfTrade) timeCount[s.timeOfTrade] = (timeCount[s.timeOfTrade] || 0) + 1; });
     const mostCommonTime = Object.entries(timeCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, c]) => ({ time: t, count: c }));
 
-    res.json({ total, confluenceHitRate, bestSession, outcomeBreakdown, avgMaxRun, biasWinRate, mostCommonTime });
+    // Sweep type breakdown
+    const sweepTypeCount = {};
+    setups.forEach((s) => { if (s.sweepType) sweepTypeCount[s.sweepType] = (sweepTypeCount[s.sweepType] || 0) + 1; });
+    const sweepTypeBreakdown = Object.keys(sweepTypeCount).length > 0 ? sweepTypeCount : null;
+
+    // Target reached rate
+    const targetReachedRate = total > 0
+      ? Math.round((setups.filter((s) => s.reachedTarget).length / total) * 100)
+      : null;
+
+    // Return to PD rate
+    const returnToPDRate = total > 0
+      ? Math.round((setups.filter((s) => s.returnToPD).length / total) * 100)
+      : null;
+
+    // MSS direction breakdown
+    const mssCount = {};
+    setups.forEach((s) => { if (s.mssDirection) mssCount[s.mssDirection] = (mssCount[s.mssDirection] || 0) + 1; });
+    const mssDirectionBreakdown = Object.keys(mssCount).length > 0 ? mssCount : null;
+
+    // Macro window frequency
+    const macroCount = {};
+    setups.forEach((s) => {
+      (s.macroWindows || []).forEach((w) => { macroCount[w] = (macroCount[w] || 0) + 1; });
+    });
+    const macroWindowFrequency = Object.keys(macroCount).length > 0
+      ? Object.entries(macroCount)
+          .sort((a, b) => b[1] - a[1])
+          .reduce((acc, [k, v]) => ({ ...acc, [k]: { count: v, pct: Math.round((v / total) * 100) } }), {})
+      : null;
+
+    // Master rules adherence
+    const topicDoc = await StudyTopic.findById(req.params.topicId);
+    const masterRuleTexts = (topicDoc?.masterRules || [])
+      .map(r => (typeof r === 'string' ? r : r.text))
+      .filter(Boolean);
+    let masterRulesAdherence = null;
+    if (masterRuleTexts.length > 0) {
+      const compliantCount = setups.filter(s => {
+        const setupTexts = (s.setupRules || []).map(r => (typeof r === 'string' ? r : r?.text) || '').filter(Boolean);
+        return masterRuleTexts.every(mt => setupTexts.some(st => st === mt || st.includes(mt) || mt.includes(st)));
+      }).length;
+      masterRulesAdherence = Math.round((compliantCount / total) * 100);
+    }
+
+    // Top discoveries (most frequently logged)
+    const discMap = {};
+    setups.forEach(s => {
+      (s.discoveries || []).forEach(d => {
+        const t = d?.text?.trim();
+        if (t) discMap[t] = (discMap[t] || 0) + 1;
+      });
+    });
+    const topDiscoveries = Object.entries(discMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([text, count]) => ({ text, count }));
+
+    res.json({ total, confluenceHitRate, bestSession, outcomeBreakdown, avgMaxRun, biasWinRate, mostCommonTime,
+      sweepTypeBreakdown, targetReachedRate, returnToPDRate, mssDirectionBreakdown, macroWindowFrequency,
+      masterRulesAdherence, topDiscoveries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -288,7 +377,40 @@ router.get('/analytics/global', auth, async (req, res) => {
       ...acc, [b]: { total: g.total, textbookRate: g.total > 0 ? Math.round((g.textbook / g.total) * 100) : null },
     }), {});
 
-    res.json({ total, topCombos, timeHeatmap, sessionMatrix, biasAccuracy });
+    // ── Sweep type outcome matrix ────────────────────────────────────────
+    const sweepOutcomeMap = {};
+    setups.forEach((s) => {
+      if (!s.sweepType) return;
+      if (!sweepOutcomeMap[s.sweepType]) sweepOutcomeMap[s.sweepType] = { count: 0, textbook: 0, totalRun: 0, runCount: 0 };
+      sweepOutcomeMap[s.sweepType].count++;
+      if (s.outcome === 'Textbook') sweepOutcomeMap[s.sweepType].textbook++;
+      if (s.maxRun != null) { sweepOutcomeMap[s.sweepType].totalRun += s.maxRun; sweepOutcomeMap[s.sweepType].runCount++; }
+    });
+    const sweepTypeOutcomeMatrix = Object.entries(sweepOutcomeMap).map(([sweepType, v]) => ({
+      sweepType,
+      count: v.count,
+      textbookRate: Math.round((v.textbook / v.count) * 100),
+      avgMaxRun: v.runCount > 0 ? parseFloat((v.totalRun / v.runCount).toFixed(2)) : null,
+    })).sort((a, b) => b.textbookRate - a.textbookRate);
+
+    // ── Macro window outcome matrix ──────────────────────────────────────
+    const macroOutcomeMap = {};
+    setups.forEach((s) => {
+      (s.macroWindows || []).forEach((w) => {
+        if (!macroOutcomeMap[w]) macroOutcomeMap[w] = { count: 0, textbook: 0, totalRun: 0, runCount: 0 };
+        macroOutcomeMap[w].count++;
+        if (s.outcome === 'Textbook') macroOutcomeMap[w].textbook++;
+        if (s.maxRun != null) { macroOutcomeMap[w].totalRun += s.maxRun; macroOutcomeMap[w].runCount++; }
+      });
+    });
+    const macroWindowOutcomeMatrix = Object.entries(macroOutcomeMap).map(([macroWindow, v]) => ({
+      macroWindow,
+      count: v.count,
+      textbookRate: Math.round((v.textbook / v.count) * 100),
+      avgMaxRun: v.runCount > 0 ? parseFloat((v.totalRun / v.runCount).toFixed(2)) : null,
+    })).sort((a, b) => b.textbookRate - a.textbookRate);
+
+    res.json({ total, topCombos, timeHeatmap, sessionMatrix, biasAccuracy, sweepTypeOutcomeMatrix, macroWindowOutcomeMatrix });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -7,6 +7,7 @@ const studyTopicSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     tags:        [{ type: String }],
     color:       { type: String, default: '#6366f1' }, // indigo default
+    masterRules: [{ type: mongoose.Schema.Types.Mixed }], // { text: String, subs: [String] }
   },
   { timestamps: true }
 );

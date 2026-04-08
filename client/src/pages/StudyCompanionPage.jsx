@@ -2,13 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { ICT_TAGS } from '../utils/ictTags';
-import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon } from '@heroicons/react/24/outline';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const SESSIONS = ['Asia', 'London', 'New York', 'London-NY Overlap'];
 const OUTCOMES  = ['Textbook', 'Partial', 'Failed', 'Pending'];
 const BIASES    = ['Bullish', 'Bearish', 'Neutral'];
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#10b981','#ef4444','#3b82f6','#f97316'];
+const MACRO_WINDOWS = ['7:30','7:50','8:10','8:30','8:50'];
+const EVENT_TYPES  = ['Liquidity Run','Sweep','FVG Formed','MSS','Failure to Continue','Retracement','Entry','Exit','Other'];
 
 const inputCls = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500';
 const selectCls = `${inputCls} cursor-pointer`;
@@ -139,6 +141,90 @@ function TopicAnalytics({ topicId }) {
                   </div>
                 </div>
               )}
+
+              {/* Mechanics Stats */}
+              {(data.sweepTypeBreakdown || data.targetReachedRate != null || data.returnToPDRate != null || data.mssDirectionBreakdown || data.macroWindowFrequency) && (
+                <div>
+                  <SectionHeading>Mechanics Stats</SectionHeading>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      {data.targetReachedRate != null && <StatBlock label="Target Reached" value={`${data.targetReachedRate}%`} />}
+                      {data.returnToPDRate != null && <StatBlock label="Returned to PD" value={`${data.returnToPDRate}%`} />}
+                    </div>
+                    {data.sweepTypeBreakdown && Object.keys(data.sweepTypeBreakdown).length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1.5">Sweep Type</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {Object.entries(data.sweepTypeBreakdown).map(([k, v]) => (
+                            <span key={k} className="text-xs bg-gray-800 border border-gray-700 rounded-full px-3 py-1 text-gray-300">{k}: <span className="font-semibold">{v}</span></span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {data.mssDirectionBreakdown && Object.keys(data.mssDirectionBreakdown).length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1.5">MSS Direction</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {Object.entries(data.mssDirectionBreakdown).map(([k, v]) => (
+                            <span key={k} className={`text-xs bg-gray-800 border border-gray-700 rounded-full px-3 py-1 ${k === 'Bullish MSS' ? 'text-emerald-400' : 'text-rose-400'}`}>{k}: <span className="font-semibold">{v}</span></span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {data.macroWindowFrequency && Object.keys(data.macroWindowFrequency).length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1.5">Macro Windows</p>
+                        <div className="space-y-1.5">
+                          {Object.entries(data.macroWindowFrequency).slice(0, 8).map(([w, { count, pct }]) => (
+                            <div key={w} className="flex items-center gap-3">
+                              <span className="text-xs text-gray-400 w-36 shrink-0 truncate">{w}</span>
+                              <div className="flex-1 bg-gray-800 rounded-full h-2">
+                                <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-400 w-12 text-right">{pct}% ({count})</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Master Rules Adherence */}
+              {data.masterRulesAdherence != null && (
+                <div>
+                  <SectionHeading>Rule Adherence</SectionHeading>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Setups matching master rules</span>
+                      <span className="text-sm font-bold text-gray-100">{data.masterRulesAdherence}%</span>
+                    </div>
+                    <div className="bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${data.masterRulesAdherence >= 80 ? 'bg-emerald-500' : data.masterRulesAdherence >= 50 ? 'bg-yellow-500' : 'bg-rose-500'}`}
+                        style={{ width: `${data.masterRulesAdherence}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Top Discoveries */}
+              {data.topDiscoveries?.length > 0 && (
+                <div>
+                  <SectionHeading>Top Discoveries</SectionHeading>
+                  <div className="space-y-1.5">
+                    {data.topDiscoveries.slice(0, 5).map(({ text, count }) => (
+                      <div key={text} className="flex items-start gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                        <span className="text-yellow-400 shrink-0 text-sm mt-0.5">◆</span>
+                        <span className="text-xs text-gray-300 flex-1 break-words">{text}</span>
+                        <span className="text-xs text-gray-500 shrink-0">{count}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -151,20 +237,67 @@ function TopicAnalytics({ topicId }) {
 // SetupForm (create / edit)
 // ════════════════════════════════════════════════════════════════════════════
 const BLANK_SETUP = {
-  title: '', tvLink: '', chartImageUrl: '', setupRules: [''],
+  title: '', tvLink: '', chartImageUrl: '', chartImages: [],
+  setupRules: [{ text: '', subs: [] }],
   confluences: [], bias: '', session: '', timeOfTrade: '',
   maxRun: '', outcome: '', narrative: '', notes: '',
+  macroWindows: [],
+  liquiditySwept: [], sweepType: '', sweepDirection: '', targetLiquidity: '', liquidityQuality: '',
+  pdArray: '', pdArrayLevel: '', returnToPD: false, entryTrigger: '', closeBelowCE: false,
+  mssDirection: '', mssTime: '', engineeredLiq: false,
+  targetLevel: '', stalledAt: '', reachedTarget: false,
+  discoveries: [], events: [],
+  mfe: '', mae: '', rMultiple: '', entryLevel: '', stopLevel: '',
 };
 
-function SetupForm({ topicId, initial, onSave, onCancel }) {
+function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
+  const baseRules = topicMasterRules?.length
+    ? topicMasterRules.map(r => typeof r === 'string'
+        ? { text: r, subs: [], isMasterRule: true, checked: false, comment: '', playedAt: '' }
+        : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: true, checked: false, comment: '', playedAt: '' })
+    : [{ text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' }];
   const [form, setForm] = useState(initial ? {
     ...initial,
-    setupRules: initial.setupRules?.length ? initial.setupRules : [''],
+    setupRules: (initial.setupRules?.length
+      ? initial.setupRules.map(r => typeof r === 'string'
+          ? { text: r, subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' }
+          : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, comment: r.comment ?? '', playedAt: r.playedAt ?? '' })
+      : baseRules),
+    chartImages: initial.chartImages?.length
+      ? initial.chartImages
+      : (initial.chartImageUrl ? [{ url: initial.chartImageUrl, caption: '' }] : []),
+    discoveries: initial.discoveries ?? [],
+    events: initial.events ?? [],
+    mfe: initial.mfe ?? '',
+    mae: initial.mae ?? '',
+    rMultiple: initial.rMultiple ?? '',
+    entryLevel: initial.entryLevel ?? '',
+    stopLevel: initial.stopLevel ?? '',
+    liquidityQuality: initial.liquidityQuality ?? '',
+    closeBelowCE: initial.closeBelowCE ?? false,
     maxRun: initial.maxRun ?? '',
-  } : { ...BLANK_SETUP });
+    macroWindows: initial.macroWindows ?? [],
+    liquiditySwept: initial.liquiditySwept ?? [],
+    sweepType: initial.sweepType ?? '',
+    sweepDirection: initial.sweepDirection ?? '',
+    targetLiquidity: initial.targetLiquidity ?? '',
+    pdArray: initial.pdArray ?? '',
+    pdArrayLevel: initial.pdArrayLevel ?? '',
+    returnToPD: initial.returnToPD ?? false,
+    entryTrigger: initial.entryTrigger ?? '',
+    mssDirection: initial.mssDirection ?? '',
+    mssTime: initial.mssTime ?? '',
+    engineeredLiq: initial.engineeredLiq ?? false,
+    targetLevel: initial.targetLevel ?? '',
+    stalledAt: initial.stalledAt ?? '',
+    reachedTarget: initial.reachedTarget ?? false,
+  } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [] });
+  const [liqInput, setLiqInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const fileRef = useRef();
+  const discRefs = useRef({});
+  const eventDescRefs = useRef({});
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -175,16 +308,56 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
       : [...f.confluences, c],
   }));
 
-  const addRule   = () => setForm((f) => ({ ...f, setupRules: [...f.setupRules, ''] }));
-  const setRule   = (i, v) => setForm((f) => { const r = [...f.setupRules]; r[i] = v; return { ...f, setupRules: r }; });
-  const removeRule = (i) => setForm((f) => ({ ...f, setupRules: f.setupRules.filter((_, idx) => idx !== i) }));
+  const ruleInputRefs = useRef({});
+
+  const addRule = (afterIndex) => setForm((f) => {
+    const r = [...f.setupRules];
+    const at = afterIndex !== undefined ? afterIndex + 1 : r.length;
+    r.splice(at, 0, { text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' });
+    setTimeout(() => ruleInputRefs.current[`r-${at}`]?.focus(), 0);
+    return { ...f, setupRules: r };
+  });
+  const updateRule = (i, fields) => setForm(f => { const r = [...f.setupRules]; r[i] = { ...r[i], ...fields }; return { ...f, setupRules: r }; });
+  const setRule = (i, v) => setForm((f) => { const r = [...f.setupRules]; r[i] = { ...r[i], text: v }; return { ...f, setupRules: r }; });
+  const removeRule = (i) => setForm((f) => {
+    if (f.setupRules.length <= 1) return f;
+    const r = f.setupRules.filter((_, idx) => idx !== i);
+    setTimeout(() => ruleInputRefs.current[`r-${Math.max(0, i - 1)}`]?.focus(), 0);
+    return { ...f, setupRules: r };
+  });
+  const moveRule  = (from, to) => setForm((f) => { const r = [...f.setupRules]; const [m] = r.splice(from, 1); r.splice(to, 0, m); return { ...f, setupRules: r }; });
+
+  const addSub = (ri, afterIdx) => setForm((f) => {
+    const rules = [...f.setupRules];
+    const subs = [...(rules[ri].subs || [])];
+    const at = afterIdx !== undefined ? afterIdx + 1 : subs.length;
+    subs.splice(at, 0, '');
+    rules[ri] = { ...rules[ri], subs };
+    setTimeout(() => ruleInputRefs.current[`s-${ri}-${at}`]?.focus(), 0);
+    return { ...f, setupRules: rules };
+  });
+  const setSub = (ri, si, v) => setForm((f) => {
+    const rules = [...f.setupRules]; const subs = [...(rules[ri].subs || [])];
+    subs[si] = v; rules[ri] = { ...rules[ri], subs }; return { ...f, setupRules: rules };
+  });
+  const removeSub = (ri, si) => setForm((f) => {
+    const rules = [...f.setupRules];
+    const subs = (rules[ri].subs || []).filter((_, idx) => idx !== si);
+    rules[ri] = { ...rules[ri], subs };
+    setTimeout(() => ruleInputRefs.current[subs.length ? `s-${ri}-${Math.max(0, si - 1)}` : `r-${ri}`]?.focus(), 0);
+    return { ...f, setupRules: rules };
+  });
+
+  const dragRuleIndex = useRef(null);
+  const dragOverRuleIndex = useRef(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
 
   const analyzeLink = async () => {
     if (!form.tvLink.trim()) { toast.error('Paste a TradingView link first'); return; }
     setAnalyzing(true);
     try {
       const { data } = await api.post('/charts/analyze', { tvLink: form.tvLink.trim() });
-      setForm((f) => ({ ...f, chartImageUrl: data.imageUrl || f.chartImageUrl }));
+      if (data.imageUrl) setForm((f) => ({ ...f, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: '' }] }));
       toast.success('Chart loaded');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to analyze link');
@@ -196,7 +369,7 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
     try {
       const fd = new FormData(); fd.append('chart', file);
       const { data } = await api.post('/charts/analyze-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setForm((f) => ({ ...f, chartImageUrl: data.imageUrl || f.chartImageUrl }));
+      if (data.imageUrl) setForm((f) => ({ ...f, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: '' }] }));
       toast.success('Chart uploaded');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Upload failed');
@@ -209,8 +382,17 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
       const payload = {
         ...form,
         topicId,
-        setupRules: form.setupRules.filter(Boolean),
+        setupRules: form.setupRules.filter(r => r.isMasterRule || r.text || r.subs?.some(Boolean)),
+        discoveries: (form.discoveries || []).filter(d => d.text?.trim()),
+        events: (form.events || []).filter(e => e.type || e.description?.trim()),
+        chartImages: (form.chartImages || []).filter(img => img.url?.trim()),
+        chartImageUrl: form.chartImages?.[0]?.url || form.chartImageUrl || '',
         maxRun: form.maxRun !== '' ? Number(form.maxRun) : undefined,
+        mfe: form.mfe !== '' ? Number(form.mfe) : undefined,
+        mae: form.mae !== '' ? Number(form.mae) : undefined,
+        rMultiple: form.rMultiple !== '' ? Number(form.rMultiple) : undefined,
+        entryLevel: form.entryLevel !== '' ? Number(form.entryLevel) : undefined,
+        stopLevel: form.stopLevel !== '' ? Number(form.stopLevel) : undefined,
       };
       let result;
       if (initial?._id) {
@@ -237,9 +419,9 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
         <input type="text" value={form.title} onChange={set('title')} placeholder="e.g. FVG into OB — London session" className={inputCls} />
       </div>
 
-      {/* Chart */}
+      {/* Chart Images */}
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-400">Chart Image</label>
+        <label className="block text-xs font-medium text-gray-400">Chart Images</label>
         <div className="flex gap-2">
           <input type="url" placeholder="https://www.tradingview.com/x/…" value={form.tvLink} onChange={set('tvLink')} onKeyDown={(e) => e.key === 'Enter' && analyzeLink()} className={`${inputCls} flex-1`} />
           <button onClick={analyzeLink} disabled={analyzing} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap">
@@ -249,27 +431,207 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <span>or</span>
           <button type="button" onClick={() => fileRef.current?.click()} disabled={analyzing} className="text-indigo-400 hover:underline">upload screenshot</button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files[0]) analyzeUpload(e.target.files[0]); }} />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files[0]) analyzeUpload(e.target.files[0]); e.target.value = ''; }} />
+          {(form.chartImages?.length > 0) && <span className="ml-auto text-gray-600">{form.chartImages.length} image{form.chartImages.length !== 1 ? 's' : ''}</span>}
         </div>
-        {form.chartImageUrl && (
-          <img src={form.chartImageUrl} alt="chart" className="rounded-lg max-h-52 object-contain border border-gray-700 w-full" />
+        {(form.chartImages?.length > 0) && (
+          <div className="space-y-2">
+            {form.chartImages.map((img, idx) => (
+              <div key={idx} className="rounded-lg border border-gray-700 overflow-hidden bg-gray-800">
+                <img src={img.url} alt={`chart ${idx + 1}`} className="w-full max-h-40 object-contain" />
+                <div className="flex gap-2 p-2 items-center border-t border-gray-700">
+                  <input
+                    type="text"
+                    value={img.caption || ''}
+                    onChange={(e) => {
+                      const imgs = [...form.chartImages];
+                      imgs[idx] = { ...imgs[idx], caption: e.target.value };
+                      setForm(f => ({ ...f, chartImages: imgs }));
+                    }}
+                    placeholder="Caption (optional)…"
+                    className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button type="button" onClick={() => setForm(f => ({ ...f, chartImages: f.chartImages.filter((_, i) => i !== idx) }))} className="text-gray-600 hover:text-rose-400 transition-colors">
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
       {/* Setup Rules */}
+      <div className="space-y-4">
+
+        {/* ── Core Rules Checklist (from master rules, locked text) ─────── */}
+        {form.setupRules.some(r => r.isMasterRule) && (
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Core Rules Checklist</label>
+            <p className="text-xs text-gray-600 mb-2">Tick each rule that played out. Log the time and leave an observation where relevant.</p>
+            <div className="space-y-2">
+              {form.setupRules
+                .map((rule, i) => ({ rule, i }))
+                .filter(({ rule }) => rule.isMasterRule)
+                .map(({ rule, i }, idx) => (
+                  <div key={i} className={`border rounded-xl p-3 transition-colors ${rule.checked ? 'border-emerald-800 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={rule.checked || false}
+                        onChange={(e) => updateRule(i, { checked: e.target.checked })}
+                        className="mt-1 w-4 h-4 cursor-pointer accent-emerald-500 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-1.5">
+                          <span className="text-xs text-gray-600 shrink-0 mt-0.5">{idx + 1}.</span>
+                          <p className={`text-sm leading-snug ${rule.checked ? 'text-emerald-300' : 'text-gray-300'}`}>{rule.text}</p>
+                        </div>
+                        {(rule.subs || []).filter(Boolean).map((sub, j) => (
+                          <div key={j} className="flex gap-2 ml-3 mt-1 items-baseline">
+                            <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                            <span className="text-xs text-gray-500 leading-relaxed">{sub}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="ml-7 mt-2 space-y-1.5">
+                      <div className="flex gap-2 items-center">
+                        <label className="text-xs text-gray-600 shrink-0 w-16">Played at</label>
+                        <input
+                          type="time"
+                          value={rule.playedAt || ''}
+                          onChange={(e) => updateRule(i, { playedAt: e.target.value })}
+                          className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <input
+                        type="text"
+                        value={rule.comment || ''}
+                        onChange={(e) => updateRule(i, { comment: e.target.value })}
+                        placeholder="Observation for this setup…"
+                        className={`${inputCls} text-xs`}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Additional Observations (free-form, editable) ─────────────── */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2">
+            {form.setupRules.some(r => r.isMasterRule) ? 'Additional Observations' : 'Setup Rules / Entry Conditions'}
+          </label>
+          <div className="space-y-2">
+            {form.setupRules
+              .map((rule, i) => ({ rule, i }))
+              .filter(({ rule }) => !rule.isMasterRule)
+              .map(({ rule, i }, freeIdx) => (
+                <div key={i}>
+                  <div
+                    draggable
+                    onDragStart={() => { dragRuleIndex.current = i; }}
+                    onDragEnter={() => { dragOverRuleIndex.current = i; setDragOverIdx(i); }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragEnd={() => {
+                      if (dragRuleIndex.current !== null && dragOverRuleIndex.current !== null && dragRuleIndex.current !== dragOverRuleIndex.current) {
+                        moveRule(dragRuleIndex.current, dragOverRuleIndex.current);
+                      }
+                      dragRuleIndex.current = null; dragOverRuleIndex.current = null; setDragOverIdx(null);
+                    }}
+                    className={`flex gap-2 items-center rounded-lg transition-colors ${
+                      dragOverIdx === i ? 'bg-indigo-950/60 border border-indigo-700' : 'border border-transparent'
+                    }`}
+                  >
+                    <span className="text-gray-600 cursor-grab active:cursor-grabbing shrink-0 px-1 py-2 hover:text-gray-400 transition-colors">
+                      <Bars3Icon className="w-4 h-4" />
+                    </span>
+                    <span className="text-xs text-gray-600 w-5 text-right shrink-0">{freeIdx + 1}.</span>
+                    <input
+                      type="text"
+                      value={rule.text}
+                      onChange={(e) => setRule(i, e.target.value)}
+                      placeholder="Observation…"
+                      className={`${inputCls} flex-1`}
+                      ref={(el) => { if (el) ruleInputRefs.current[`r-${i}`] = el; else delete ruleInputRefs.current[`r-${i}`]; }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); addRule(i); }
+                        if (e.key === 'Backspace' && rule.text === '' && !rule.subs?.length) { e.preventDefault(); removeRule(i); }
+                      }}
+                    />
+                    <button type="button" onClick={() => addSub(i)} className="text-gray-600 hover:text-indigo-400 shrink-0 transition-colors" title="Add sub-note">
+                      <PlusIcon className="w-3.5 h-3.5" />
+                    </button>
+                    <button type="button" onClick={() => removeRule(i)} className="text-rose-500 hover:text-rose-400 shrink-0"><TrashIcon className="w-4 h-4" /></button>
+                  </div>
+                  {(rule.subs || []).map((sub, j) => (
+                    <div key={j} className="flex gap-2 items-center ml-10 mt-1">
+                      <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                      <input
+                        type="text"
+                        value={sub}
+                        onChange={(e) => setSub(i, j, e.target.value)}
+                        placeholder="Caveat or expected reaction…"
+                        className="w-full bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex-1"
+                        ref={(el) => { if (el) ruleInputRefs.current[`s-${i}-${j}`] = el; else delete ruleInputRefs.current[`s-${i}-${j}`]; }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); addSub(i, j); }
+                          if (e.key === 'Backspace' && sub === '') { e.preventDefault(); removeSub(i, j); }
+                        }}
+                      />
+                      <button type="button" onClick={() => removeSub(i, j)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors"><TrashIcon className="w-3.5 h-3.5" /></button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            <button type="button" onClick={() => addRule()} className="text-xs text-indigo-400 hover:underline">+ Add observation</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Discoveries — variable observations unique to this setup */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-2">Setup Rules / Entry Conditions</label>
-        <div className="space-y-2">
-          {form.setupRules.map((rule, i) => (
+        <label className="block text-xs font-medium text-gray-400 mb-1">Discoveries / Variable Observations</label>
+        <p className="text-xs text-gray-500 mb-2">What was unique about this setup? Press Enter to add.</p>
+        <div className="space-y-1.5">
+          {(form.discoveries || []).map((d, i) => (
             <div key={i} className="flex gap-2 items-center">
-              <span className="text-xs text-gray-600 w-5 text-right">{i + 1}.</span>
-              <input type="text" value={rule} onChange={(e) => setRule(i, e.target.value)} placeholder="Rule…" className={`${inputCls} flex-1`} />
-              {form.setupRules.length > 1 && (
-                <button onClick={() => removeRule(i)} className="text-rose-500 hover:text-rose-400 shrink-0"><TrashIcon className="w-4 h-4" /></button>
-              )}
+              <span className="text-yellow-500 shrink-0 text-sm">◆</span>
+              <input
+                type="text"
+                value={d.text || ''}
+                onChange={(e) => {
+                  const disc = [...form.discoveries];
+                  disc[i] = { ...disc[i], text: e.target.value };
+                  setForm(f => ({ ...f, discoveries: disc }));
+                }}
+                placeholder="e.g. FVG was at 50% of the dealing range…"
+                className={`${inputCls} flex-1`}
+                ref={(el) => { if (el) discRefs.current[i] = el; else delete discRefs.current[i]; }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const disc = [...form.discoveries];
+                    disc.splice(i + 1, 0, { text: '', promoted: false });
+                    setForm(f => ({ ...f, discoveries: disc }));
+                    setTimeout(() => discRefs.current[i + 1]?.focus(), 0);
+                  }
+                  if (e.key === 'Backspace' && !d.text) {
+                    e.preventDefault();
+                    setForm(f => ({ ...f, discoveries: f.discoveries.filter((_, idx) => idx !== i) }));
+                    setTimeout(() => discRefs.current[Math.max(0, i - 1)]?.focus(), 0);
+                  }
+                }}
+              />
+              {d.promoted && <span className="text-xs text-emerald-400 shrink-0">✓ Rule</span>}
+              <button type="button" onClick={() => setForm(f => ({ ...f, discoveries: f.discoveries.filter((_, idx) => idx !== i) }))} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors">
+                <TrashIcon className="w-4 h-4" />
+              </button>
             </div>
           ))}
-          <button onClick={addRule} className="text-xs text-indigo-400 hover:underline">+ Add rule</button>
+          <button type="button" onClick={() => setForm(f => ({ ...f, discoveries: [...(f.discoveries || []), { text: '', promoted: false }] }))} className="text-xs text-indigo-400 hover:underline">+ Add discovery</button>
         </div>
       </div>
 
@@ -280,6 +642,191 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
           {ICT_TAGS.map((tag) => (
             <Chip key={tag} label={tag} active={form.confluences.includes(tag)} onClick={() => toggleConfluence(tag)} />
           ))}
+        </div>
+      </div>
+
+      {/* ── Macro Windows ── */}
+      <div>
+        <SectionHeading>Macro Windows Touched</SectionHeading>
+        <p className="text-xs text-gray-500 mb-2">Select all macro windows that interacted with price in this setup</p>
+        <div className="flex flex-wrap gap-1.5">
+          {MACRO_WINDOWS.map((w) => (
+            <Chip key={w} label={w} active={form.macroWindows.includes(w)} onClick={() => setForm((f) => ({
+              ...f,
+              macroWindows: f.macroWindows.includes(w) ? f.macroWindows.filter((x) => x !== w) : [...f.macroWindows, w],
+            }))} />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Liquidity ── */}
+      <div className="space-y-3">
+        <SectionHeading>Liquidity</SectionHeading>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Liquidity Swept</label>
+          <input
+            type="text"
+            value={liqInput}
+            onChange={(e) => setLiqInput(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ',') && liqInput.trim()) {
+                e.preventDefault();
+                const v = liqInput.trim().replace(/,$/, '');
+                if (v && !form.liquiditySwept.includes(v)) setForm((f) => ({ ...f, liquiditySwept: [...f.liquiditySwept, v] }));
+                setLiqInput('');
+              }
+            }}
+            placeholder="e.g. 7:30 SSL, 2AM SSL — press Enter to add"
+            className={inputCls}
+          />
+          {form.liquiditySwept.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {form.liquiditySwept.map((tag) => (
+                <span key={tag} className="text-xs bg-indigo-950 text-indigo-300 border border-indigo-900 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {tag}
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, liquiditySwept: f.liquiditySwept.filter((x) => x !== tag) }))} className="text-indigo-400 hover:text-rose-400 leading-none">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Sweep Type</label>
+          <div className="flex gap-2 flex-wrap">
+            {['Wick Sweep', 'Body Sweep', 'Both'].map((t) => (
+              <Chip key={t} label={t} active={form.sweepType === t} onClick={() => setForm((f) => ({ ...f, sweepType: f.sweepType === t ? '' : t }))} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Sweep Direction</label>
+          <div className="flex gap-2 flex-wrap">
+            {['Sellside Taken', 'Buyside Taken'].map((d) => (
+              <Chip key={d} label={d} active={form.sweepDirection === d} onClick={() => setForm((f) => ({ ...f, sweepDirection: f.sweepDirection === d ? '' : d }))} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Target Liquidity</label>
+          <input type="text" value={form.targetLiquidity} onChange={set('targetLiquidity')} placeholder="e.g. Major BSL / 37.5% OVNR level" className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Liquidity Quality</label>
+          <div className="flex gap-2 flex-wrap">
+            {['Minor', 'Major'].map((q) => (
+              <Chip key={q} label={q} active={form.liquidityQuality === q} onClick={() => setForm((f) => ({ ...f, liquidityQuality: f.liquidityQuality === q ? '' : q }))} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── PD Array / Entry ── */}
+      <div className="space-y-3">
+        <SectionHeading>PD Array / Entry</SectionHeading>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">PD Array</label>
+            <input type="text" value={form.pdArray} onChange={set('pdArray')} placeholder="e.g. 1st Presented FVG, Breaker OB" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">PD Array Level</label>
+            <input type="text" value={form.pdArrayLevel} onChange={set('pdArrayLevel')} placeholder="e.g. 12.5 OVNR + 0.25 SD" className={inputCls} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Entry Trigger</label>
+          <input type="text" value={form.entryTrigger} onChange={set('entryTrigger')} placeholder="e.g. Body fails to close below CE of FVG" className={inputCls} />
+        </div>
+        <div>
+          <Chip label="Price Returned to PD Array" active={form.returnToPD} onClick={() => setForm((f) => ({ ...f, returnToPD: !f.returnToPD }))} />
+        </div>
+        <div>
+          <Chip label="Closed Below CE / Key Level" active={form.closeBelowCE} onClick={() => setForm((f) => ({ ...f, closeBelowCE: !f.closeBelowCE }))} />
+        </div>
+      </div>
+
+      {/* ── Market Structure ── */}
+      <div className="space-y-3">
+        <SectionHeading>Market Structure</SectionHeading>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">MSS Direction</label>
+          <div className="flex gap-2 flex-wrap">
+            {['Bullish MSS', 'Bearish MSS'].map((d) => (
+              <Chip key={d} label={d} active={form.mssDirection === d} onClick={() => setForm((f) => ({ ...f, mssDirection: f.mssDirection === d ? '' : d }))} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">MSS Candle Time</label>
+          <input type="time" value={form.mssTime} onChange={set('mssTime')} className={inputCls} />
+        </div>
+        <div>
+          <Chip label="Engineered Liquidity Present" active={form.engineeredLiq} onClick={() => setForm((f) => ({ ...f, engineeredLiq: !f.engineeredLiq }))} />
+        </div>
+      </div>
+
+      {/* ── Target ── */}
+      <div className="space-y-3">
+        <SectionHeading>Target</SectionHeading>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Target Level</label>
+            <input type="text" value={form.targetLevel} onChange={set('targetLevel')} placeholder="e.g. 2.5 SD / Major BSL" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Stalled At</label>
+            <input type="text" value={form.stalledAt} onChange={set('stalledAt')} placeholder="e.g. 18.75 OVNR (if price stalled short)" className={inputCls} />
+          </div>
+        </div>
+        <div>
+          <Chip label="Target Reached" active={form.reachedTarget} onClick={() => setForm((f) => ({ ...f, reachedTarget: !f.reachedTarget }))} />
+        </div>
+      </div>
+
+      {/* Event Timeline */}
+      <div className="space-y-2">
+        <SectionHeading>Event Timeline</SectionHeading>
+        <p className="text-xs text-gray-500 -mt-1 mb-2">Key market events during this setup — Enter to add next row.</p>
+        <div className="space-y-2">
+          {(form.events || []).map((ev, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <input
+                type="time"
+                value={ev.time || ''}
+                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], time: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-28 shrink-0"
+              />
+              <select
+                value={ev.type || 'Other'}
+                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], type: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
+              >
+                {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
+              </select>
+              <input
+                type="text"
+                value={ev.description || ''}
+                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], description: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
+                placeholder="Description…"
+                className={`${inputCls} flex-1`}
+                ref={(el) => { if (el) eventDescRefs.current[i] = el; else delete eventDescRefs.current[i]; }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setForm(f => ({
+                      ...f,
+                      events: [...f.events.slice(0, i + 1), { time: '', type: 'Other', description: '' }, ...f.events.slice(i + 1)],
+                    }));
+                    setTimeout(() => eventDescRefs.current[i + 1]?.focus(), 0);
+                  }
+                }}
+              />
+              <button type="button" onClick={() => setForm(f => ({ ...f, events: f.events.filter((_, idx) => idx !== i) }))} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors">
+                <TrashIcon className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setForm(f => ({ ...f, events: [...(f.events || []), { time: '', type: 'Other', description: '' }] }))} className="text-xs text-indigo-400 hover:underline">+ Add event</button>
         </div>
       </div>
 
@@ -318,6 +865,35 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
       </div>
 
       {/* Narrative + Notes */}
+      <div className="space-y-3">
+        <SectionHeading>Trade Metrics</SectionHeading>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Entry Level</label>
+            <input type="number" step="any" value={form.entryLevel} onChange={set('entryLevel')} placeholder="Price" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Stop Level</label>
+            <input type="number" step="any" value={form.stopLevel} onChange={set('stopLevel')} placeholder="Price" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">R Multiple</label>
+            <input type="number" step="any" value={form.rMultiple} onChange={set('rMultiple')} placeholder="e.g. 2.5" className={inputCls} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">MFE (pts)</label>
+            <input type="number" step="any" value={form.mfe} onChange={set('mfe')} placeholder="Max favorable excursion" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">MAE (pts)</label>
+            <input type="number" step="any" value={form.mae} onChange={set('mae')} placeholder="Max adverse excursion" className={inputCls} />
+          </div>
+        </div>
+      </div>
+
+      {/* Narrative + Notes */}
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Narrative</label>
         <textarea rows={3} value={form.narrative} onChange={set('narrative')} placeholder="What is the story behind this setup?" className={`${inputCls} resize-none`} />
@@ -342,7 +918,14 @@ function SetupForm({ topicId, initial, onSave, onCancel }) {
 // ════════════════════════════════════════════════════════════════════════════
 function SetupCard({ setup, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
-  const [lightbox, setLightbox] = useState(false);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  // Normalise images — prefer chartImages, fall back to legacy chartImageUrl
+  const images = setup.chartImages?.length
+    ? setup.chartImages
+    : setup.chartImageUrl
+    ? [{ url: setup.chartImageUrl, caption: '' }]
+    : [];
 
   const outcomeColor = {
     Textbook: 'bg-emerald-900 text-emerald-300',
@@ -353,19 +936,37 @@ function SetupCard({ setup, onEdit, onDelete }) {
 
   const biasColor = { Bullish: 'text-emerald-400', Bearish: 'text-rose-400', Neutral: 'text-yellow-400' }[setup.bias] || 'text-gray-400';
 
+  const eventDot = {
+    'Entry': 'bg-emerald-500', 'Exit': 'bg-rose-500', 'MSS': 'bg-indigo-500',
+    'Sweep': 'bg-yellow-500', 'FVG Formed': 'bg-purple-500', 'Liquidity Run': 'bg-orange-500',
+  };
+
   return (
     <>
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(false)}>
-          <img src={setup.chartImageUrl} alt="chart" className="max-w-full max-h-full rounded-lg" />
+      {/* Multi-image lightbox */}
+      {lightboxIdx !== null && images.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4" onClick={() => setLightboxIdx(null)}>
+          <img src={images[lightboxIdx].url} alt={images[lightboxIdx].caption || 'chart'} className="max-w-full max-h-[78vh] rounded-lg object-contain" />
+          {images[lightboxIdx].caption && <p className="text-xs text-gray-400 mt-2">{images[lightboxIdx].caption}</p>}
+          {images.length > 1 && (
+            <div className="flex gap-3 mt-4" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setLightboxIdx(i => Math.max(0, i - 1))} className="text-gray-300 hover:text-white px-4 py-1.5 bg-gray-800 rounded-lg text-sm">← Prev</button>
+              <span className="text-gray-500 text-sm self-center">{lightboxIdx + 1} / {images.length}</span>
+              <button onClick={() => setLightboxIdx(i => Math.min(images.length - 1, i + 1))} className="text-gray-300 hover:text-white px-4 py-1.5 bg-gray-800 rounded-lg text-sm">Next →</button>
+            </div>
+          )}
+          <p className="text-xs text-gray-600 mt-3">Click anywhere to close</p>
         </div>
       )}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden hover:border-gray-700 transition-colors">
         <div className="flex gap-3 p-4">
           {/* Chart thumbnail */}
-          {setup.chartImageUrl ? (
-            <div className="shrink-0 w-28 h-20 rounded-lg overflow-hidden cursor-zoom-in border border-gray-800 bg-gray-800" onClick={() => setLightbox(true)}>
-              <img src={setup.chartImageUrl} alt="chart" className="w-full h-full object-cover" />
+          {images.length > 0 ? (
+            <div className="relative shrink-0 w-28 h-20 rounded-lg overflow-hidden cursor-zoom-in border border-gray-800 bg-gray-800" onClick={() => setLightboxIdx(0)}>
+              <img src={images[0].url} alt="chart" className="w-full h-full object-cover" />
+              {images.length > 1 && (
+                <span className="absolute bottom-1 right-1 bg-black/75 text-white text-xs px-1.5 py-0.5 rounded-full leading-none">+{images.length - 1}</span>
+              )}
             </div>
           ) : setup.tvLink ? (
             <a href={setup.tvLink} target="_blank" rel="noreferrer"
@@ -406,7 +1007,9 @@ function SetupCard({ setup, onEdit, onDelete }) {
         </div>
 
         {/* Expandable details */}
-        {(setup.setupRules?.filter(Boolean).length > 0 || setup.narrative || setup.notes) && (
+        {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes ||
+          setup.sweepType || setup.sweepDirection || setup.entryTrigger || setup.mssDirection || setup.targetLevel ||
+          setup.discoveries?.some(d => d.text) || setup.events?.length > 0) && (
           <div className="border-t border-gray-800">
             <button
               onClick={() => setExpanded(v => !v)}
@@ -417,13 +1020,37 @@ function SetupCard({ setup, onEdit, onDelete }) {
             </button>
             {expanded && (
               <div className="px-4 pb-4 space-y-3">
-                {setup.setupRules?.filter(Boolean).length > 0 && (
+                {setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) && (
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Setup Rules</p>
-                    <ol className="space-y-1">
-                      {setup.setupRules.filter(Boolean).map((r, i) => (
-                        <li key={i} className="flex gap-2 text-sm text-gray-300"><span className="text-gray-600 shrink-0">{i + 1}.</span>{r}</li>
-                      ))}
+                    <ol className="space-y-2.5">
+                      {setup.setupRules.map((r, i) => {
+                        const rObj = typeof r === 'string' ? { text: r, subs: [] } : (r || {});
+                        const { text, subs = [], isMasterRule, checked, comment, playedAt } = { subs: [], ...rObj };
+                        if (!text && !(subs).filter(Boolean).length) return null;
+                        const freeNum = isMasterRule ? null : setup.setupRules.filter((x, xi) => !x?.isMasterRule && xi < i).length + 1;
+                        return (
+                          <li key={i}>
+                            <div className="flex gap-2 items-start">
+                              <span className={`shrink-0 mt-0.5 text-sm font-medium ${isMasterRule ? (checked ? 'text-emerald-400' : 'text-gray-600') : 'text-gray-600'}`}>
+                                {isMasterRule ? (checked ? '✓' : '○') : `${freeNum}.`}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm leading-snug ${isMasterRule && checked ? 'text-emerald-300' : isMasterRule && !checked ? 'text-gray-500' : 'text-gray-300'}`}>
+                                  {text}{playedAt ? <span className="text-xs text-gray-500 ml-2">@ {playedAt}</span> : null}
+                                </p>
+                                {(subs).filter(Boolean).map((s, j) => (
+                                  <div key={j} className="flex gap-1.5 ml-2 mt-0.5">
+                                    <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                                    <span className="text-xs text-gray-500 leading-relaxed">{s}</span>
+                                  </div>
+                                ))}
+                                {comment && <p className="text-xs text-gray-500 italic mt-1">{comment}</p>}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ol>
                   </div>
                 )}
@@ -442,6 +1069,65 @@ function SetupCard({ setup, onEdit, onDelete }) {
                 {setup.tvLink && (
                   <a href={setup.tvLink} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">Open on TradingView ↗</a>
                 )}
+                {/* Mechanics */}
+                {(setup.sweepType || setup.sweepDirection || setup.entryTrigger || setup.mssDirection || setup.targetLevel) && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Mechanics</p>
+                    <div className="space-y-1 text-sm text-gray-300">
+                      {(setup.sweepType || setup.sweepDirection) && (
+                        <p><span className="text-gray-500">Sweep:</span> {[setup.sweepType, setup.sweepDirection].filter(Boolean).join(' — ')}{setup.liquidityQuality ? <span className="ml-1 text-xs text-yellow-400">({setup.liquidityQuality})</span> : null}</p>
+                      )}
+                      {setup.entryTrigger && (
+                        <p><span className="text-gray-500">Entry:</span> {setup.entryTrigger}{setup.closeBelowCE ? <span className="ml-1 text-xs text-indigo-400">· Closed below CE</span> : null}</p>
+                      )}
+                      {setup.mssDirection && (
+                        <p><span className="text-gray-500">MSS:</span> {setup.mssDirection}{setup.mssTime ? ` at ${setup.mssTime}` : ''}</p>
+                      )}
+                      {setup.targetLevel && (
+                        <p><span className="text-gray-500">Target:</span> {setup.targetLevel} — {setup.reachedTarget ? '✓ Reached' : setup.stalledAt ? `Stalled at ${setup.stalledAt}` : 'Not recorded'}</p>
+                      )}
+                      {(setup.mfe != null || setup.mae != null || setup.rMultiple != null) && (
+                        <p className="text-xs text-gray-500">
+                          {setup.mfe != null ? `MFE ${setup.mfe}pts` : ''}{setup.mae != null ? `  MAE ${setup.mae}pts` : ''}{setup.rMultiple != null ? `  ${setup.rMultiple}R` : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Discoveries */}
+                {setup.discoveries?.some(d => d.text) && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Discoveries</p>
+                    <div className="space-y-1">
+                      {setup.discoveries.filter(d => d.text).map((d, i) => (
+                        <div key={i} className="flex gap-2 items-start">
+                          <span className={`shrink-0 text-sm mt-0.5 ${d.promoted ? 'text-emerald-400' : 'text-yellow-500'}`}>◆</span>
+                          <p className="text-xs text-gray-300 leading-relaxed">{d.text}</p>
+                          {d.promoted && <span className="text-xs text-emerald-500 shrink-0">Rule</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Event Timeline */}
+                {setup.events?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Event Timeline</p>
+                    <div className="space-y-1.5">
+                      {setup.events.map((ev, i) => (
+                        <div key={i} className="flex gap-2 items-start">
+                          <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${eventDot[ev.type] || 'bg-gray-500'}`} />
+                          <div className="min-w-0">
+                            <span className="text-xs text-gray-500">{ev.time && `${ev.time} · `}{ev.type}</span>
+                            {ev.description && <p className="text-xs text-gray-300">{ev.description}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -455,9 +1141,37 @@ function SetupCard({ setup, onEdit, onDelete }) {
 // TopicModal (create / edit topic)
 // ════════════════════════════════════════════════════════════════════════════
 function TopicModal({ initial, onSave, onClose }) {
-  const [form, setForm] = useState(initial || { name: '', description: '', tags: '', color: '#6366f1' });
+  const [form, setForm] = useState({
+    name:        initial?.name ?? '',
+    description: initial?.description ?? '',
+    tags:        initial ? (typeof initial.tags === 'string' ? initial.tags : initial.tags?.join(', ') || '') : '',
+    color:       initial?.color ?? '#6366f1',
+    masterRules: initial?.masterRules?.length
+      ? initial.masterRules.map(r => typeof r === 'string' ? { text: r, subs: [] } : { text: r.text ?? '', subs: r.subs ?? [] })
+      : [],
+  });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const setMasterRule = (i, v) => setForm(f => {
+    const r = [...f.masterRules]; r[i] = { ...r[i], text: v }; return { ...f, masterRules: r };
+  });
+  const addMasterRule = (afterIdx) => setForm(f => {
+    const r = [...f.masterRules];
+    r.splice(afterIdx + 1, 0, { text: '', subs: [] });
+    return { ...f, masterRules: r };
+  });
+  const removeMasterRule = (i) => setForm(f => ({ ...f, masterRules: f.masterRules.filter((_, idx) => idx !== i) }));
+  const setMasterSub = (ri, si, v) => setForm(f => {
+    const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
+    subs[si] = v; r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
+  });
+  const addMasterSub = (ri) => setForm(f => {
+    const r = [...f.masterRules]; r[ri] = { ...r[ri], subs: [...(r[ri].subs || []), ''] }; return { ...f, masterRules: r };
+  });
+  const removeMasterSub = (ri, si) => setForm(f => {
+    const r = [...f.masterRules]; r[ri] = { ...r[ri], subs: (r[ri].subs || []).filter((_, i) => i !== si) }; return { ...f, masterRules: r };
+  });
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
@@ -468,6 +1182,7 @@ function TopicModal({ initial, onSave, onClose }) {
         description: form.description,
         color: form.color,
         tags: typeof form.tags === 'string' ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : form.tags,
+        masterRules: (form.masterRules || []).filter(r => r.text?.trim()),
       };
       let result;
       if (initial?._id) {
@@ -483,7 +1198,7 @@ function TopicModal({ initial, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm space-y-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto space-y-4">
         <p className="text-sm font-bold text-gray-100">{initial ? 'Edit Topic' : 'New Study Topic'}</p>
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Name *</label>
@@ -495,7 +1210,7 @@ function TopicModal({ initial, onSave, onClose }) {
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Tags (comma-separated)</label>
-          <input type="text" value={typeof form.tags === 'string' ? form.tags : form.tags?.join(', ')} onChange={set('tags')} className={inputCls} placeholder="e.g. ICT, FVG, Trend" />
+          <input type="text" value={form.tags} onChange={set('tags')} className={inputCls} placeholder="e.g. ICT, FVG, Trend" />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-2">Color</label>
@@ -507,6 +1222,58 @@ function TopicModal({ initial, onSave, onClose }) {
             ))}
           </div>
         </div>
+
+        {/* Master Rules */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Master Rules</label>
+          <p className="text-xs text-gray-500 mb-2">Core conditions every setup in this topic must satisfy. Enter to add next rule, Backspace on empty to delete.</p>
+          <div className="space-y-1.5">
+            {(form.masterRules || []).map((rule, i) => (
+              <div key={i}>
+                <div className="flex gap-2 items-center">
+                  <span className="text-xs text-gray-600 w-5 text-right shrink-0">{i + 1}.</span>
+                  <input
+                    type="text"
+                    value={rule.text}
+                    onChange={(e) => setMasterRule(i, e.target.value)}
+                    placeholder="Rule…"
+                    className={`${inputCls} flex-1`}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); addMasterRule(i); }
+                      if (e.key === 'Backspace' && !rule.text && !rule.subs?.length) { e.preventDefault(); removeMasterRule(i); }
+                    }}
+                  />
+                  <button type="button" onClick={() => addMasterSub(i)} className="text-gray-600 hover:text-indigo-400 shrink-0 transition-colors" title="Add sub-rule">
+                    <PlusIcon className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => removeMasterRule(i)} className="text-gray-600 hover:text-rose-400 shrink-0">
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
+                {(rule.subs || []).map((sub, j) => (
+                  <div key={j} className="flex gap-2 items-center ml-7 mt-1">
+                    <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                    <input
+                      type="text"
+                      value={sub}
+                      onChange={(e) => setMasterSub(i, j, e.target.value)}
+                      placeholder="Sub-rule or caveat…"
+                      className="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && !sub) { e.preventDefault(); removeMasterSub(i, j); }
+                      }}
+                    />
+                    <button type="button" onClick={() => removeMasterSub(i, j)} className="text-gray-600 hover:text-rose-400 shrink-0">
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '', subs: [] }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
+          </div>
+        </div>
+
         <div className="flex gap-3 pt-1">
           <button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
             {saving ? 'Saving…' : 'Save'}
@@ -514,6 +1281,150 @@ function TopicModal({ initial, onSave, onClose }) {
           <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-2">Cancel</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MasterRulesCard — collapsible display of topic-level master rules
+// ════════════════════════════════════════════════════════════════════════════
+function MasterRulesCard({ topic, onEdit }) {
+  const [open, setOpen] = useState(false);
+  const rules = (topic.masterRules || []).filter(r => typeof r === 'string' ? r : r?.text);
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span>Master Rules</span>
+          {rules.length > 0
+            ? <span className="text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">{rules.length}</span>
+            : <span className="text-xs text-gray-600">— none yet</span>}
+        </div>
+        {open ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+      </button>
+      {open && (
+        <div className="p-5 border-t border-gray-800">
+          {rules.length === 0 ? (
+            <div className="text-center py-3">
+              <p className="text-sm text-gray-500 mb-1">No master rules defined yet.</p>
+              <p className="text-xs text-gray-600 mb-3">Master rules are core conditions every setup in this topic must meet — the 1000-kick standard.</p>
+              <button onClick={onEdit} className="text-xs text-indigo-400 hover:underline">+ Add master rules</button>
+            </div>
+          ) : (
+            <>
+              <ol className="space-y-2.5 mb-4">
+                {rules.map((r, i) => {
+                  const text = typeof r === 'string' ? r : r.text;
+                  const subs = typeof r === 'string' ? [] : (r.subs || []).filter(Boolean);
+                  return (
+                    <li key={i}>
+                      <div className="flex gap-2 text-sm text-gray-200">
+                        <span className="text-gray-600 shrink-0 select-none">{i + 1}.</span>
+                        <span>{text}</span>
+                      </div>
+                      {subs.map((s, j) => (
+                        <div key={j} className="flex gap-1.5 ml-5 mt-0.5">
+                          <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                          <span className="text-xs text-gray-500 leading-relaxed">{s}</span>
+                        </div>
+                      ))}
+                    </li>
+                  );
+                })}
+              </ol>
+              <button onClick={onEdit} className="text-xs text-indigo-400 hover:underline">Edit rules</button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ReviewDiscoveriesPanel — aggregates discoveries from all setups, lets you
+// promote frequently-seen ones to master rules
+// ════════════════════════════════════════════════════════════════════════════
+function ReviewDiscoveriesPanel({ topicId, setups, onPromote }) {
+  const [open, setOpen] = useState(false);
+  const [promoting, setPromoting] = useState(null);
+
+  // Aggregate discoveries client-side
+  const discMap = {};
+  setups.forEach(s => {
+    (s.discoveries || []).forEach(d => {
+      const key = d?.text?.trim();
+      if (!key) return;
+      if (!discMap[key]) discMap[key] = { count: 0, promoted: false };
+      discMap[key].count++;
+      if (d.promoted) discMap[key].promoted = true;
+    });
+  });
+  const aggregated = Object.entries(discMap).sort((a, b) => b[1].count - a[1].count);
+
+  const handlePromote = async (text) => {
+    setPromoting(text);
+    try {
+      const { data } = await api.post(`/study/topics/${topicId}/promote-discovery`, { text });
+      onPromote(data.topic);
+      toast.success('Promoted to master rule!');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Promote failed');
+    } finally { setPromoting(null); }
+  };
+
+  if (aggregated.length === 0 && !open) return null;
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <LightBulbIcon className="w-4 h-4 text-yellow-400" />
+          <span>Review Discoveries</span>
+          {aggregated.length > 0 && <span className="text-xs bg-yellow-900/50 text-yellow-400 px-2 py-0.5 rounded-full">{aggregated.length}</span>}
+        </div>
+        {open ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+      </button>
+      {open && (
+        <div className="p-5 border-t border-gray-800">
+          {aggregated.length === 0 ? (
+            <p className="text-sm text-gray-500 text-center py-4">No discoveries logged yet.<br /><span className="text-xs">Add variable observations in your setup forms to track patterns.</span></p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-500 mb-3">Discoveries appearing frequently may deserve promotion to a master rule.</p>
+              <div className="space-y-2">
+                {aggregated.map(([text, { count, promoted }]) => (
+                  <div key={text} className={`flex items-start gap-3 p-3 rounded-lg ${promoted ? 'bg-emerald-950/40 border border-emerald-900/40' : 'bg-gray-800'}`}>
+                    <span className="text-yellow-400 shrink-0 mt-0.5 text-sm">◆</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-200 break-words">{text}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{count} setup{count !== 1 ? 's' : ''}</p>
+                    </div>
+                    {promoted ? (
+                      <span className="text-xs text-emerald-400 shrink-0 mt-1">✓ Promoted</span>
+                    ) : (
+                      <button
+                        onClick={() => handlePromote(text)}
+                        disabled={promoting === text}
+                        className="text-xs text-indigo-400 hover:text-indigo-300 shrink-0 mt-1 disabled:opacity-50 transition-colors"
+                      >
+                        {promoting === text ? 'Promoting…' : '↑ Promote'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -531,6 +1442,7 @@ export default function StudyCompanionPage() {
   const [editingTopic, setEditingTopic]   = useState(null);
   const [showSetupForm, setShowSetupForm] = useState(false);
   const [editingSetup, setEditingSetup]   = useState(null);
+  const [reviewBannerDismissed, setReviewBannerDismissed] = useState(false);
 
   // ── Load topics ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -549,6 +1461,7 @@ export default function StudyCompanionPage() {
     const id = activeTopic?._id;
     if (!id) return;
     setLoadingSetups(true);
+    setReviewBannerDismissed(false);
     api.get(`/study/setups?topicId=${id}`)
       .then(({ data }) => setSetups(data.setups))
       .catch(() => toast.error('Failed to load setups'))
@@ -564,6 +1477,11 @@ export default function StudyCompanionPage() {
     setActiveTopic(topic);
     setShowTopicModal(false);
     setEditingTopic(null);
+  };
+
+  const handlePromoteDiscovery = (updatedTopic) => {
+    setTopics(prev => prev.map(t => t._id === updatedTopic._id ? { ...t, ...updatedTopic } : t));
+    setActiveTopic(prev => prev?._id === updatedTopic._id ? { ...prev, ...updatedTopic } : prev);
   };
 
   const handleDeleteTopic = async (topicId) => {
@@ -681,10 +1599,29 @@ export default function StudyCompanionPage() {
             {/* Topic analytics accordion */}
             <TopicAnalytics topicId={activeTopic._id} />
 
+            {/* Master Rules card */}
+            <MasterRulesCard
+              topic={activeTopic}
+              onEdit={() => { setEditingTopic(activeTopic); setShowTopicModal(true); }}
+            />
+
+            {/* 25-setup review cadence banner */}
+            {!reviewBannerDismissed && setups.length > 0 && setups.length % 25 === 0 && (
+              <div className="bg-indigo-950 border border-indigo-800 rounded-xl p-4 flex items-start gap-3">
+                <LightBulbIcon className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-indigo-300">Time for a Rule Review</p>
+                  <p className="text-xs text-indigo-400 mt-0.5">You've logged {setups.length} setups — a great moment to review your discoveries and sharpen your master rules.</p>
+                </div>
+                <button onClick={() => setReviewBannerDismissed(true)} className="text-indigo-600 hover:text-indigo-400 text-xs shrink-0">Dismiss</button>
+              </div>
+            )}
+
             {/* Setup form */}
             {showSetupForm && (
               <SetupForm
                 topicId={activeTopic._id}
+                topicMasterRules={activeTopic.masterRules}
                 initial={editingSetup}
                 onSave={handleSetupSaved}
                 onCancel={() => { setShowSetupForm(false); setEditingSetup(null); }}
@@ -705,6 +1642,15 @@ export default function StudyCompanionPage() {
                   <SetupCard key={s._id} setup={s} onEdit={openEditSetup} onDelete={handleDeleteSetup} />
                 ))}
               </div>
+            )}
+
+            {/* Review Discoveries panel — appears when setups have discoveries */}
+            {!loadingSetups && setups.length > 0 && (
+              <ReviewDiscoveriesPanel
+                topicId={activeTopic._id}
+                setups={setups}
+                onPromote={handlePromoteDiscovery}
+              />
             )}
           </div>
         )}
