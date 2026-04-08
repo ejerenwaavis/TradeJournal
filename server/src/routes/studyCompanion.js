@@ -66,6 +66,25 @@ router.put('/topics/:id', auth, async (req, res) => {
   }
 });
 
+// POST /api/study/topics/:id/clone — clone a topic's framework (no data entries)
+router.post('/topics/:id/clone', auth, async (req, res) => {
+  try {
+    const source = await StudyTopic.findOne({ _id: req.params.id, userId: req.userId });
+    if (!source) return res.status(404).json({ error: 'Topic not found' });
+    const clone = await StudyTopic.create({
+      userId: req.userId,
+      name: (req.body.name || source.name + ' (Copy)').slice(0, 120),
+      description: source.description,
+      tags: source.tags,
+      color: source.color,
+      masterRules: source.masterRules,
+    });
+    res.status(201).json({ topic: { ...clone.toObject(), setupCount: 0 } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // POST /api/study/topics/:id/promote-discovery — promote a discovery text to a master rule
 router.post('/topics/:id/promote-discovery', auth, async (req, res) => {
   try {

@@ -81,6 +81,9 @@ const studySetupSchema = new mongoose.Schema(
     // Phase 5 — Additional ICT qualifiers
     liquidityQuality: { type: String, enum: ['Minor', 'Major', ''], default: '' },
     closeBelowCE:     { type: Boolean, default: false },
+
+    // Multi-opportunity — multiple trade entries per study sample
+    opportunities: [{ type: mongoose.Schema.Types.Mixed }],
   },
   { timestamps: true }
 );

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { ICT_TAGS } from '../utils/ictTags';
-import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const SESSIONS = ['Asia', 'London', 'New York', 'London-NY Overlap'];
@@ -10,7 +10,6 @@ const OUTCOMES  = ['Textbook', 'Partial', 'Failed', 'Pending'];
 const BIASES    = ['Bullish', 'Bearish', 'Neutral'];
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#14b8a6','#f59e0b','#10b981','#ef4444','#3b82f6','#f97316'];
 const MACRO_WINDOWS = ['7:30','7:50','8:10','8:30','8:50'];
-const EVENT_TYPES  = ['Liquidity Run','Sweep','FVG Formed','MSS','Failure to Continue','Retracement','Entry','Exit','Other'];
 
 const inputCls = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500';
 const selectCls = `${inputCls} cursor-pointer`;
@@ -236,18 +235,25 @@ function TopicAnalytics({ topicId }) {
 // ════════════════════════════════════════════════════════════════════════════
 // SetupForm (create / edit)
 // ════════════════════════════════════════════════════════════════════════════
+// Per-trade fields (one per opportunity)
+const BLANK_OPPORTUNITY = {
+  bias: '', timeOfTrade: '', outcome: '', maxRun: '',
+  entryTrigger: '', pdArrayLevel: '', returnToPD: false, closeBelowCE: false,
+  targetLevel: '', stalledAt: '', reachedTarget: false,
+  entryLevel: '', stopLevel: '', rMultiple: '', mfe: '', mae: '',
+};
+
+const OPP_KEYS = Object.keys(BLANK_OPPORTUNITY);
+
 const BLANK_SETUP = {
   title: '', tvLink: '', chartImageUrl: '', chartImages: [],
   setupRules: [{ text: '', subs: [] }],
-  confluences: [], bias: '', session: '', timeOfTrade: '',
-  maxRun: '', outcome: '', narrative: '', notes: '',
+  confluences: [], session: '', narrative: '', notes: '',
   macroWindows: [],
   liquiditySwept: [], sweepType: '', sweepDirection: '', targetLiquidity: '', liquidityQuality: '',
-  pdArray: '', pdArrayLevel: '', returnToPD: false, entryTrigger: '', closeBelowCE: false,
-  mssDirection: '', mssTime: '', engineeredLiq: false,
-  targetLevel: '', stalledAt: '', reachedTarget: false,
+  pdArray: '', mssDirection: '', mssTime: '', engineeredLiq: false,
   discoveries: [], events: [],
-  mfe: '', mae: '', rMultiple: '', entryLevel: '', stopLevel: '',
+  opportunities: [{ ...BLANK_OPPORTUNITY }],
 };
 
 function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
@@ -256,6 +262,15 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         ? { text: r, subs: [], isMasterRule: true, checked: false, comment: '', playedAt: '' }
         : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: true, checked: false, comment: '', playedAt: '' })
     : [{ text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' }];
+
+  // Migrate legacy per-trade fields into opportunities[0] for older setups
+  const migrateOpps = (s) => {
+    if (s.opportunities?.length) return s.opportunities.map(o => ({ ...BLANK_OPPORTUNITY, ...o, maxRun: o.maxRun ?? '', mfe: o.mfe ?? '', mae: o.mae ?? '', rMultiple: o.rMultiple ?? '', entryLevel: o.entryLevel ?? '', stopLevel: o.stopLevel ?? '' }));
+    const opp = {};
+    OPP_KEYS.forEach(k => { if (s[k] != null && s[k] !== '' && s[k] !== false) opp[k] = s[k]; });
+    return Object.keys(opp).length ? [{ ...BLANK_OPPORTUNITY, ...opp }] : [{ ...BLANK_OPPORTUNITY }];
+  };
+
   const [form, setForm] = useState(initial ? {
     ...initial,
     setupRules: (initial.setupRules?.length
@@ -268,36 +283,52 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
       : (initial.chartImageUrl ? [{ url: initial.chartImageUrl, caption: '' }] : []),
     discoveries: initial.discoveries ?? [],
     events: initial.events ?? [],
-    mfe: initial.mfe ?? '',
-    mae: initial.mae ?? '',
-    rMultiple: initial.rMultiple ?? '',
-    entryLevel: initial.entryLevel ?? '',
-    stopLevel: initial.stopLevel ?? '',
     liquidityQuality: initial.liquidityQuality ?? '',
-    closeBelowCE: initial.closeBelowCE ?? false,
-    maxRun: initial.maxRun ?? '',
     macroWindows: initial.macroWindows ?? [],
     liquiditySwept: initial.liquiditySwept ?? [],
     sweepType: initial.sweepType ?? '',
     sweepDirection: initial.sweepDirection ?? '',
     targetLiquidity: initial.targetLiquidity ?? '',
     pdArray: initial.pdArray ?? '',
-    pdArrayLevel: initial.pdArrayLevel ?? '',
-    returnToPD: initial.returnToPD ?? false,
-    entryTrigger: initial.entryTrigger ?? '',
     mssDirection: initial.mssDirection ?? '',
     mssTime: initial.mssTime ?? '',
     engineeredLiq: initial.engineeredLiq ?? false,
-    targetLevel: initial.targetLevel ?? '',
-    stalledAt: initial.stalledAt ?? '',
-    reachedTarget: initial.reachedTarget ?? false,
+    session: initial.session ?? '',
+    opportunities: migrateOpps(initial),
   } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [] });
+  const [activeOpp, setActiveOpp] = useState(0);
   const [liqInput, setLiqInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const fileRef = useRef();
   const discRefs = useRef({});
-  const eventDescRefs = useRef({});
+
+  // Opportunity helpers
+  const opp = form.opportunities[activeOpp] || BLANK_OPPORTUNITY;
+  const setOpp = (field) => (e) => setForm(f => {
+    const opps = [...f.opportunities];
+    opps[activeOpp] = { ...opps[activeOpp], [field]: e.target.value };
+    return { ...f, opportunities: opps };
+  });
+  const toggleOpp = (field) => () => setForm(f => {
+    const opps = [...f.opportunities];
+    opps[activeOpp] = { ...opps[activeOpp], [field]: !opps[activeOpp][field] };
+    return { ...f, opportunities: opps };
+  });
+  const setOppField = (field, value) => setForm(f => {
+    const opps = [...f.opportunities];
+    opps[activeOpp] = { ...opps[activeOpp], [field]: value };
+    return { ...f, opportunities: opps };
+  });
+  const addOpportunity = () => {
+    setForm(f => ({ ...f, opportunities: [...f.opportunities, { ...BLANK_OPPORTUNITY }] }));
+    setActiveOpp(form.opportunities.length);
+  };
+  const removeOpportunity = (idx) => {
+    if (form.opportunities.length <= 1) return;
+    setForm(f => ({ ...f, opportunities: f.opportunities.filter((_, i) => i !== idx) }));
+    setActiveOpp(prev => Math.min(prev, form.opportunities.length - 2));
+  };
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -379,6 +410,18 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Clean opportunities — cast numbers, drop empties
+      const cleanOpps = form.opportunities.map(o => ({
+        ...o,
+        maxRun: o.maxRun !== '' ? Number(o.maxRun) : undefined,
+        mfe: o.mfe !== '' ? Number(o.mfe) : undefined,
+        mae: o.mae !== '' ? Number(o.mae) : undefined,
+        rMultiple: o.rMultiple !== '' ? Number(o.rMultiple) : undefined,
+        entryLevel: o.entryLevel !== '' ? Number(o.entryLevel) : undefined,
+        stopLevel: o.stopLevel !== '' ? Number(o.stopLevel) : undefined,
+      }));
+      // Flatten first opportunity to top-level for backward compat
+      const first = cleanOpps[0] || {};
       const payload = {
         ...form,
         topicId,
@@ -387,12 +430,14 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         events: (form.events || []).filter(e => e.type || e.description?.trim()),
         chartImages: (form.chartImages || []).filter(img => img.url?.trim()),
         chartImageUrl: form.chartImages?.[0]?.url || form.chartImageUrl || '',
-        maxRun: form.maxRun !== '' ? Number(form.maxRun) : undefined,
-        mfe: form.mfe !== '' ? Number(form.mfe) : undefined,
-        mae: form.mae !== '' ? Number(form.mae) : undefined,
-        rMultiple: form.rMultiple !== '' ? Number(form.rMultiple) : undefined,
-        entryLevel: form.entryLevel !== '' ? Number(form.entryLevel) : undefined,
-        stopLevel: form.stopLevel !== '' ? Number(form.stopLevel) : undefined,
+        opportunities: cleanOpps,
+        // Backward-compat top-level fields from first opportunity
+        bias: first.bias, timeOfTrade: first.timeOfTrade, outcome: first.outcome,
+        maxRun: first.maxRun, entryTrigger: first.entryTrigger, pdArrayLevel: first.pdArrayLevel,
+        returnToPD: first.returnToPD, closeBelowCE: first.closeBelowCE,
+        targetLevel: first.targetLevel, stalledAt: first.stalledAt, reachedTarget: first.reachedTarget,
+        entryLevel: first.entryLevel, stopLevel: first.stopLevel,
+        rMultiple: first.rMultiple, mfe: first.mfe, mae: first.mae,
       };
       let result;
       if (initial?._id) {
@@ -720,29 +765,10 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         </div>
       </div>
 
-      {/* ── PD Array / Entry ── */}
-      <div className="space-y-3">
-        <SectionHeading>PD Array / Entry</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">PD Array</label>
-            <input type="text" value={form.pdArray} onChange={set('pdArray')} placeholder="e.g. 1st Presented FVG, Breaker OB" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">PD Array Level</label>
-            <input type="text" value={form.pdArrayLevel} onChange={set('pdArrayLevel')} placeholder="e.g. 12.5 OVNR + 0.25 SD" className={inputCls} />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Entry Trigger</label>
-          <input type="text" value={form.entryTrigger} onChange={set('entryTrigger')} placeholder="e.g. Body fails to close below CE of FVG" className={inputCls} />
-        </div>
-        <div>
-          <Chip label="Price Returned to PD Array" active={form.returnToPD} onClick={() => setForm((f) => ({ ...f, returnToPD: !f.returnToPD }))} />
-        </div>
-        <div>
-          <Chip label="Closed Below CE / Key Level" active={form.closeBelowCE} onClick={() => setForm((f) => ({ ...f, closeBelowCE: !f.closeBelowCE }))} />
-        </div>
+      {/* ── PD Array (shared context) ── */}
+      <div>
+        <SectionHeading>PD Array</SectionHeading>
+        <input type="text" value={form.pdArray} onChange={set('pdArray')} placeholder="e.g. 1st Presented FVG, Breaker OB" className={inputCls} />
       </div>
 
       {/* ── Market Structure ── */}
@@ -765,132 +791,128 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         </div>
       </div>
 
-      {/* ── Target ── */}
+      {/* ── Session (shared) ── */}
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1">Session</label>
+        <select value={form.session} onChange={set('session')} className={selectCls}>
+          <option value="">—</option>
+          {SESSIONS.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* ══ Trade Opportunities ══════════════════════════════════════════ */}
       <div className="space-y-3">
-        <SectionHeading>Target</SectionHeading>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Target Level</label>
-            <input type="text" value={form.targetLevel} onChange={set('targetLevel')} placeholder="e.g. 2.5 SD / Major BSL" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Stalled At</label>
-            <input type="text" value={form.stalledAt} onChange={set('stalledAt')} placeholder="e.g. 18.75 OVNR (if price stalled short)" className={inputCls} />
-          </div>
-        </div>
-        <div>
-          <Chip label="Target Reached" active={form.reachedTarget} onClick={() => setForm((f) => ({ ...f, reachedTarget: !f.reachedTarget }))} />
-        </div>
-      </div>
-
-      {/* Event Timeline */}
-      <div className="space-y-2">
-        <SectionHeading>Event Timeline</SectionHeading>
-        <p className="text-xs text-gray-500 -mt-1 mb-2">Key market events during this setup — Enter to add next row.</p>
-        <div className="space-y-2">
-          {(form.events || []).map((ev, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <input
-                type="time"
-                value={ev.time || ''}
-                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], time: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-28 shrink-0"
-              />
-              <select
-                value={ev.type || 'Other'}
-                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], type: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
-                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
+        <SectionHeading>Trade Opportunities</SectionHeading>
+        {form.opportunities.length > 1 && (
+          <div className="flex gap-1.5 flex-wrap">
+            {form.opportunities.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setActiveOpp(idx)}
+                className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${activeOpp === idx ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}
               >
-                {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-              <input
-                type="text"
-                value={ev.description || ''}
-                onChange={(e) => { const evs = [...form.events]; evs[i] = { ...evs[i], description: e.target.value }; setForm(f => ({ ...f, events: evs })); }}
-                placeholder="Description…"
-                className={`${inputCls} flex-1`}
-                ref={(el) => { if (el) eventDescRefs.current[i] = el; else delete eventDescRefs.current[i]; }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setForm(f => ({
-                      ...f,
-                      events: [...f.events.slice(0, i + 1), { time: '', type: 'Other', description: '' }, ...f.events.slice(i + 1)],
-                    }));
-                    setTimeout(() => eventDescRefs.current[i + 1]?.focus(), 0);
-                  }
-                }}
-              />
-              <button type="button" onClick={() => setForm(f => ({ ...f, events: f.events.filter((_, idx) => idx !== i) }))} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors">
-                <TrashIcon className="w-4 h-4" />
+                Opportunity {idx + 1}
               </button>
-            </div>
-          ))}
-          <button type="button" onClick={() => setForm(f => ({ ...f, events: [...(f.events || []), { time: '', type: 'Other', description: '' }] }))} className="text-xs text-indigo-400 hover:underline">+ Add event</button>
-        </div>
-      </div>
-
-      {/* Bias + Session + Time + Max Run + Outcome */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Bias</label>
-          <select value={form.bias} onChange={set('bias')} className={selectCls}>
-            <option value="">—</option>
-            {BIASES.map((b) => <option key={b}>{b}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Session</label>
-          <select value={form.session} onChange={set('session')} className={selectCls}>
-            <option value="">—</option>
-            {SESSIONS.map((s) => <option key={s}>{s}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Time of Trade</label>
-          <input type="time" value={form.timeOfTrade} onChange={set('timeOfTrade')} className={inputCls} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Max Run (pts)</label>
-          <input type="number" step="any" value={form.maxRun} onChange={set('maxRun')} className={inputCls} />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-xs font-medium text-gray-400 mb-1">Outcome</label>
-          <div className="flex gap-2 flex-wrap">
-            {OUTCOMES.map((o) => (
-              <Chip key={o} label={o} active={form.outcome === o} onClick={() => setForm((f) => ({ ...f, outcome: f.outcome === o ? '' : o }))} />
             ))}
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Narrative + Notes */}
-      <div className="space-y-3">
-        <SectionHeading>Trade Metrics</SectionHeading>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Entry Level</label>
-            <input type="number" step="any" value={form.entryLevel} onChange={set('entryLevel')} placeholder="Price" className={inputCls} />
+        {/* Active opportunity fields */}
+        <div className="border border-gray-700/60 rounded-xl p-4 space-y-4 bg-gray-800/20">
+          {form.opportunities.length > 1 && (
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-indigo-300">Opportunity {activeOpp + 1}</p>
+              <button type="button" onClick={() => removeOpportunity(activeOpp)} className="text-xs text-rose-500 hover:text-rose-400">Remove</button>
+            </div>
+          )}
+
+          {/* Bias + Time + Outcome row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Bias</label>
+              <select value={opp.bias} onChange={setOpp('bias')} className={selectCls}>
+                <option value="">—</option>
+                {BIASES.map((b) => <option key={b}>{b}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Time of Trade</label>
+              <input type="time" value={opp.timeOfTrade} onChange={setOpp('timeOfTrade')} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Max Run (pts)</label>
+              <input type="number" step="any" value={opp.maxRun} onChange={setOpp('maxRun')} className={inputCls} />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-400 mb-1">Outcome</label>
+              <div className="flex gap-2 flex-wrap">
+                {OUTCOMES.map((o) => (
+                  <Chip key={o} label={o} active={opp.outcome === o} onClick={() => setOppField('outcome', opp.outcome === o ? '' : o)} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Entry / PD */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">PD Array Level</label>
+              <input type="text" value={opp.pdArrayLevel} onChange={setOpp('pdArrayLevel')} placeholder="e.g. 12.5 OVNR + 0.25 SD" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Entry Trigger</label>
+              <input type="text" value={opp.entryTrigger} onChange={setOpp('entryTrigger')} placeholder="e.g. Body fails to close below CE" className={inputCls} />
+            </div>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <Chip label="Price Returned to PD" active={opp.returnToPD} onClick={toggleOpp('returnToPD')} />
+            <Chip label="Closed Below CE" active={opp.closeBelowCE} onClick={toggleOpp('closeBelowCE')} />
+          </div>
+
+          {/* Target */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Target Level</label>
+              <input type="text" value={opp.targetLevel} onChange={setOpp('targetLevel')} placeholder="e.g. 2.5 SD / Major BSL" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Stalled At</label>
+              <input type="text" value={opp.stalledAt} onChange={setOpp('stalledAt')} placeholder="If price stalled short" className={inputCls} />
+            </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Stop Level</label>
-            <input type="number" step="any" value={form.stopLevel} onChange={set('stopLevel')} placeholder="Price" className={inputCls} />
+            <Chip label="Target Reached" active={opp.reachedTarget} onClick={toggleOpp('reachedTarget')} />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">R Multiple</label>
-            <input type="number" step="any" value={form.rMultiple} onChange={set('rMultiple')} placeholder="e.g. 2.5" className={inputCls} />
+
+          {/* Metrics */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Entry Level</label>
+              <input type="number" step="any" value={opp.entryLevel} onChange={setOpp('entryLevel')} placeholder="Price" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Stop Level</label>
+              <input type="number" step="any" value={opp.stopLevel} onChange={setOpp('stopLevel')} placeholder="Price" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">R Multiple</label>
+              <input type="number" step="any" value={opp.rMultiple} onChange={setOpp('rMultiple')} placeholder="e.g. 2.5" className={inputCls} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">MFE (pts)</label>
+              <input type="number" step="any" value={opp.mfe} onChange={setOpp('mfe')} placeholder="Max favorable" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">MAE (pts)</label>
+              <input type="number" step="any" value={opp.mae} onChange={setOpp('mae')} placeholder="Max adverse" className={inputCls} />
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">MFE (pts)</label>
-            <input type="number" step="any" value={form.mfe} onChange={set('mfe')} placeholder="Max favorable excursion" className={inputCls} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">MAE (pts)</label>
-            <input type="number" step="any" value={form.mae} onChange={set('mae')} placeholder="Max adverse excursion" className={inputCls} />
-          </div>
-        </div>
+
+        <button type="button" onClick={addOpportunity} className="text-xs text-indigo-400 hover:underline">+ Add another trade opportunity</button>
       </div>
 
       {/* Narrative + Notes */}
@@ -927,19 +949,23 @@ function SetupCard({ setup, onEdit, onDelete }) {
     ? [{ url: setup.chartImageUrl, caption: '' }]
     : [];
 
+  // Normalise opportunities — migrate legacy top-level fields
+  const opps = setup.opportunities?.length
+    ? setup.opportunities
+    : [{ bias: setup.bias, timeOfTrade: setup.timeOfTrade, outcome: setup.outcome, maxRun: setup.maxRun, entryTrigger: setup.entryTrigger, pdArrayLevel: setup.pdArrayLevel, returnToPD: setup.returnToPD, closeBelowCE: setup.closeBelowCE, targetLevel: setup.targetLevel, stalledAt: setup.stalledAt, reachedTarget: setup.reachedTarget, entryLevel: setup.entryLevel, stopLevel: setup.stopLevel, rMultiple: setup.rMultiple, mfe: setup.mfe, mae: setup.mae }];
+
+  const first = opps[0] || {};
+
   const outcomeColor = {
     Textbook: 'bg-emerald-900 text-emerald-300',
     Partial:  'bg-yellow-900 text-yellow-300',
     Failed:   'bg-rose-900 text-rose-300',
     Pending:  'bg-gray-800 text-gray-400',
-  }[setup.outcome] || 'bg-gray-800 text-gray-500';
+  }[first.outcome] || 'bg-gray-800 text-gray-500';
 
-  const biasColor = { Bullish: 'text-emerald-400', Bearish: 'text-rose-400', Neutral: 'text-yellow-400' }[setup.bias] || 'text-gray-400';
+  const biasColor = { Bullish: 'text-emerald-400', Bearish: 'text-rose-400', Neutral: 'text-yellow-400' }[first.bias] || 'text-gray-400';
 
-  const eventDot = {
-    'Entry': 'bg-emerald-500', 'Exit': 'bg-rose-500', 'MSS': 'bg-indigo-500',
-    'Sweep': 'bg-yellow-500', 'FVG Formed': 'bg-purple-500', 'Liquidity Run': 'bg-orange-500',
-  };
+
 
   return (
     <>
@@ -983,11 +1009,12 @@ function SetupCard({ setup, onEdit, onDelete }) {
               <div className="min-w-0">
                 {setup.title && <p className="text-sm font-semibold text-gray-100 truncate">{setup.title}</p>}
                 <div className="flex flex-wrap gap-1.5 mt-1">
-                  {setup.outcome && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${outcomeColor}`}>{setup.outcome}</span>}
-                  {setup.bias    && <span className={`text-xs font-medium ${biasColor}`}>{setup.bias}</span>}
+                  {first.outcome && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${outcomeColor}`}>{first.outcome}</span>}
+                  {first.bias    && <span className={`text-xs font-medium ${biasColor}`}>{first.bias}</span>}
                   {setup.session && <span className="text-xs text-gray-500">{setup.session}</span>}
-                  {setup.timeOfTrade && <span className="text-xs text-gray-500">{setup.timeOfTrade}</span>}
-                  {setup.maxRun != null && <span className="text-xs text-gray-500">Max: {setup.maxRun} pts</span>}
+                  {first.timeOfTrade && <span className="text-xs text-gray-500">{first.timeOfTrade}</span>}
+                  {first.maxRun != null && first.maxRun !== '' && <span className="text-xs text-gray-500">Max: {first.maxRun} pts</span>}
+                  {opps.length > 1 && <span className="text-xs text-indigo-400 font-medium">{opps.length} opportunities</span>}
                 </div>
               </div>
               <div className="flex gap-1.5 shrink-0">
@@ -1008,8 +1035,8 @@ function SetupCard({ setup, onEdit, onDelete }) {
 
         {/* Expandable details */}
         {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes ||
-          setup.sweepType || setup.sweepDirection || setup.entryTrigger || setup.mssDirection || setup.targetLevel ||
-          setup.discoveries?.some(d => d.text) || setup.events?.length > 0) && (
+          setup.sweepType || setup.sweepDirection || opps.some(o => o.entryTrigger) || setup.mssDirection || opps.some(o => o.targetLevel) ||
+          setup.discoveries?.some(d => d.text)) && (
           <div className="border-t border-gray-800">
             <button
               onClick={() => setExpanded(v => !v)}
@@ -1069,30 +1096,58 @@ function SetupCard({ setup, onEdit, onDelete }) {
                 {setup.tvLink && (
                   <a href={setup.tvLink} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline">Open on TradingView ↗</a>
                 )}
-                {/* Mechanics */}
-                {(setup.sweepType || setup.sweepDirection || setup.entryTrigger || setup.mssDirection || setup.targetLevel) && (
+                {/* Mechanics — shared context */}
+                {(setup.sweepType || setup.sweepDirection || setup.mssDirection) && (
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Mechanics</p>
                     <div className="space-y-1 text-sm text-gray-300">
                       {(setup.sweepType || setup.sweepDirection) && (
                         <p><span className="text-gray-500">Sweep:</span> {[setup.sweepType, setup.sweepDirection].filter(Boolean).join(' — ')}{setup.liquidityQuality ? <span className="ml-1 text-xs text-yellow-400">({setup.liquidityQuality})</span> : null}</p>
                       )}
-                      {setup.entryTrigger && (
-                        <p><span className="text-gray-500">Entry:</span> {setup.entryTrigger}{setup.closeBelowCE ? <span className="ml-1 text-xs text-indigo-400">· Closed below CE</span> : null}</p>
-                      )}
                       {setup.mssDirection && (
                         <p><span className="text-gray-500">MSS:</span> {setup.mssDirection}{setup.mssTime ? ` at ${setup.mssTime}` : ''}</p>
                       )}
-                      {setup.targetLevel && (
-                        <p><span className="text-gray-500">Target:</span> {setup.targetLevel} — {setup.reachedTarget ? '✓ Reached' : setup.stalledAt ? `Stalled at ${setup.stalledAt}` : 'Not recorded'}</p>
-                      )}
-                      {(setup.mfe != null || setup.mae != null || setup.rMultiple != null) && (
-                        <p className="text-xs text-gray-500">
-                          {setup.mfe != null ? `MFE ${setup.mfe}pts` : ''}{setup.mae != null ? `  MAE ${setup.mae}pts` : ''}{setup.rMultiple != null ? `  ${setup.rMultiple}R` : ''}
-                        </p>
-                      )}
                     </div>
                   </div>
+                )}
+
+                {/* Per-opportunity details */}
+                {opps.map((o, oi) => {
+                  const hasMechanics = o.entryTrigger || o.targetLevel || o.mfe != null || o.mae != null || o.rMultiple != null || o.entryLevel != null || o.stopLevel != null;
+                  if (!hasMechanics && !o.bias && !o.outcome) return null;
+                  const oOutcome = { Textbook: 'bg-emerald-900 text-emerald-300', Partial: 'bg-yellow-900 text-yellow-300', Failed: 'bg-rose-900 text-rose-300', Pending: 'bg-gray-800 text-gray-400' }[o.outcome] || '';
+                  const oBias = { Bullish: 'text-emerald-400', Bearish: 'text-rose-400', Neutral: 'text-yellow-400' }[o.bias] || '';
+                  return (
+                    <div key={oi} className={opps.length > 1 ? 'border border-gray-700/60 rounded-lg p-3 space-y-1.5' : 'space-y-1.5'}>
+                      {opps.length > 1 && (
+                        <div className="flex gap-2 items-center mb-1">
+                          <span className="text-xs font-semibold text-indigo-300">Opportunity {oi + 1}</span>
+                          {o.outcome && <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${oOutcome}`}>{o.outcome}</span>}
+                          {o.bias && <span className={`text-xs font-medium ${oBias}`}>{o.bias}</span>}
+                          {o.timeOfTrade && <span className="text-xs text-gray-500">{o.timeOfTrade}</span>}
+                        </div>
+                      )}
+                      <div className="space-y-1 text-sm text-gray-300">
+                        {o.entryTrigger && (
+                          <p><span className="text-gray-500">Entry:</span> {o.entryTrigger}{o.closeBelowCE ? <span className="ml-1 text-xs text-indigo-400">· Closed below CE</span> : null}</p>
+                        )}
+                        {o.targetLevel && (
+                          <p><span className="text-gray-500">Target:</span> {o.targetLevel} — {o.reachedTarget ? '✓ Reached' : o.stalledAt ? `Stalled at ${o.stalledAt}` : 'Not recorded'}</p>
+                        )}
+                        {(o.mfe != null || o.mae != null || o.rMultiple != null) && (
+                          <p className="text-xs text-gray-500">
+                            {o.mfe != null && o.mfe !== '' ? `MFE ${o.mfe}pts` : ''}{o.mae != null && o.mae !== '' ? `  MAE ${o.mae}pts` : ''}{o.rMultiple != null && o.rMultiple !== '' ? `  ${o.rMultiple}R` : ''}
+                          </p>
+                        )}
+                        {(o.entryLevel != null && o.entryLevel !== '' || o.stopLevel != null && o.stopLevel !== '') && (
+                          <p className="text-xs text-gray-500">
+                            {o.entryLevel != null && o.entryLevel !== '' ? `Entry: ${o.entryLevel}` : ''}{o.stopLevel != null && o.stopLevel !== '' ? `  Stop: ${o.stopLevel}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
                 )}
 
                 {/* Discoveries */}
@@ -1111,23 +1166,7 @@ function SetupCard({ setup, onEdit, onDelete }) {
                   </div>
                 )}
 
-                {/* Event Timeline */}
-                {setup.events?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Event Timeline</p>
-                    <div className="space-y-1.5">
-                      {setup.events.map((ev, i) => (
-                        <div key={i} className="flex gap-2 items-start">
-                          <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${eventDot[ev.type] || 'bg-gray-500'}`} />
-                          <div className="min-w-0">
-                            <span className="text-xs text-gray-500">{ev.time && `${ev.time} · `}{ev.type}</span>
-                            {ev.description && <p className="text-xs text-gray-300">{ev.description}</p>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+
               </div>
             )}
           </div>
@@ -1497,6 +1536,18 @@ export default function StudyCompanionPage() {
     }
   };
 
+  const handleCloneTopic = async (topicId) => {
+    try {
+      const res = await api.post(`/study/topics/${topicId}/clone`);
+      const cloned = res.data.topic;
+      setTopics(prev => [cloned, ...prev]);
+      setActiveTopic(cloned);
+      toast.success(`Cloned as "${cloned.name}"`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Clone failed');
+    }
+  };
+
   const handleSetupSaved = (setup) => {
     setSetups((prev) => {
       const idx = prev.findIndex((s) => s._id === setup._id);
@@ -1559,6 +1610,7 @@ export default function StudyCompanionPage() {
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="text-xs text-gray-600">{t.setupCount || 0}</span>
                   <div className="hidden group-hover:flex gap-0.5">
+                    <button onClick={(e) => { e.stopPropagation(); handleCloneTopic(t._id); }} className="text-gray-500 hover:text-emerald-400 p-0.5" title="Clone topic"><DocumentDuplicateIcon className="w-3 h-3" /></button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingTopic(t); setShowTopicModal(true); }} className="text-gray-500 hover:text-indigo-400 p-0.5"><PencilIcon className="w-3 h-3" /></button>
                     <button onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t._id); }} className="text-gray-500 hover:text-rose-400 p-0.5"><TrashIcon className="w-3 h-3" /></button>
                   </div>
