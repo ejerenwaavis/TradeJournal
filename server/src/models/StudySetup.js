@@ -23,8 +23,8 @@ const studySetupSchema = new mongoose.Schema(
     narrative: { type: String, default: '' },
     notes:     { type: String, default: '' },
 
-    // ICT Mechanics — Macro Windows
-    macroWindows: [{ type: String, enum: ['7:30','7:50','8:10','8:30','8:50'] }],
+    // ICT Mechanics — Macro Windows (dynamic, defined per topic)
+    macroWindows: [{ type: String }],
 
     // ICT Mechanics — Liquidity Profile
     liquiditySwept:  [{ type: String }],
@@ -62,6 +62,13 @@ const studySetupSchema = new mongoose.Schema(
     discoveries: [{
       text:     { type: String },
       promoted: { type: Boolean, default: false },
+    }],
+
+    // Structured news entries (replaces legacy news string)
+    newsEntries: [{
+      time:        { type: String, default: '' },
+      severity:    { type: String, enum: ['Red', 'Orange', 'Yellow', ''], default: '' },
+      description: { type: String, default: '' },
     }],
 
     // Phase 4 — Structured event timeline

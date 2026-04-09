@@ -241,6 +241,7 @@ const BLANK_OPPORTUNITY = {
   entryTrigger: '', pdArrayLevel: '', returnToPD: false, closeBelowCE: false,
   targetLevel: '', stalledAt: '', reachedTarget: false,
   entryLevel: '', stopLevel: '', rMultiple: '', mfe: '', mae: '',
+  confluences: [],
 };
 
 const OPP_KEYS = Object.keys(BLANK_OPPORTUNITY);
@@ -249,6 +250,7 @@ const BLANK_SETUP = {
   title: '', tvLink: '', chartImageUrl: '', chartImages: [],
   setupRules: [{ text: '', subs: [] }],
   confluences: [], session: '', narrative: '', notes: '', news: '',
+  newsEntries: [],
   macroWindows: [],
   liquiditySwept: [], sweepType: '', sweepDirection: '', targetLiquidity: '', liquidityQuality: '',
   pdArray: '', mssDirection: '', mssTime: '', engineeredLiq: false,
@@ -256,12 +258,20 @@ const BLANK_SETUP = {
   opportunities: [{ ...BLANK_OPPORTUNITY }],
 };
 
-function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
+function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel }) {
+  const topicMacroWindows = topic?.macroWindows || [];
+  const studyParams = topic?.studyParameters || { showLiquidity: true, showMarketStructure: true, showPDArray: true };
+
   const baseRules = topicMasterRules?.length
-    ? topicMasterRules.map(r => typeof r === 'string'
-        ? { text: r, subs: [], isMasterRule: true, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] }
-        : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: true, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] })
-    : [{ text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] }];
+    ? topicMasterRules.map(r => {
+        const rObj = typeof r === 'string' ? { text: r, subs: [], scenarios: [] } : r;
+        const scenarios = (rObj.scenarios || []).filter(s => s.name?.trim());
+        const defaultScenarios = scenarios.length
+          ? scenarios.map(s => ({ name: s.name, observations: [{ time: '', note: '' }] }))
+          : [{ name: 'Default', observations: [{ time: '', note: '' }] }];
+        return { text: rObj.text ?? '', subs: rObj.subs ?? [], isMasterRule: true, checked: false, scenarios: defaultScenarios };
+      })
+    : [{ text: '', subs: [], isMasterRule: false, checked: false, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }] }];
 
   // Migrate legacy per-trade fields into opportunities[0] for older setups
   const migrateOpps = (s) => {
@@ -275,14 +285,12 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
     ...initial,
     setupRules: (initial.setupRules?.length
       ? initial.setupRules.map(r => {
-          if (typeof r === 'string') return { text: r, subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] };
-          // Migrate legacy playedAt/comment into observations array
-          const obs = r.observations?.length
-            ? r.observations
-            : (r.playedAt || r.comment)
-              ? [{ time: r.playedAt || '', note: r.comment || '' }]
-              : [{ time: '', note: '' }];
-          return { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, comment: r.comment ?? '', playedAt: r.playedAt ?? '', observations: obs };
+          if (typeof r === 'string') return { text: r, subs: [], isMasterRule: false, checked: false, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }] };
+          // Migrate legacy observations → scenarios
+          const existingScenarios = r.scenarios?.length ? r.scenarios : null;
+          const legacyObs = r.observations?.length ? r.observations : (r.playedAt || r.comment) ? [{ time: r.playedAt || '', note: r.comment || '' }] : [{ time: '', note: '' }];
+          const scenarios = existingScenarios || [{ name: 'Default', observations: legacyObs }];
+          return { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, scenarios };
         })
       : baseRules),
     chartImages: initial.chartImages?.length
@@ -290,6 +298,7 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
       : (initial.chartImageUrl ? [{ url: initial.chartImageUrl, caption: '' }] : []),
     discoveries: initial.discoveries ?? [],
     events: initial.events ?? [],
+    newsEntries: initial.newsEntries?.length ? initial.newsEntries : (initial.news ? [{ time: '', severity: '', description: initial.news }] : []),
     liquidityQuality: initial.liquidityQuality ?? '',
     macroWindows: initial.macroWindows ?? [],
     liquiditySwept: initial.liquiditySwept ?? [],
@@ -302,8 +311,9 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
     engineeredLiq: initial.engineeredLiq ?? false,
     session: initial.session ?? '',
     opportunities: migrateOpps(initial),
-  } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [] });
+  } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [], newsEntries: [] });
   const [activeOpp, setActiveOpp] = useState(0);
+  const [activeScenarios, setActiveScenarios] = useState({}); // { ruleIndex: scenarioIndex }
   const [liqInput, setLiqInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -343,12 +353,12 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  const toggleConfluence = (c) => setForm((f) => ({
-    ...f,
-    confluences: f.confluences.includes(c)
-      ? f.confluences.filter((x) => x !== c)
-      : [...f.confluences, c],
-  }));
+  const toggleConfluence = (c) => setForm((f) => {
+    const opps = [...f.opportunities];
+    const cur = opps[activeOpp]?.confluences || [];
+    opps[activeOpp] = { ...opps[activeOpp], confluences: cur.includes(c) ? cur.filter(x => x !== c) : [...cur, c] };
+    return { ...f, opportunities: opps };
+  });
 
   const ruleInputRefs = useRef({});
 
@@ -361,22 +371,31 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   });
   const updateRule = (i, fields) => setForm(f => { const r = [...f.setupRules]; r[i] = { ...r[i], ...fields }; return { ...f, setupRules: r }; });
   const setRule = (i, v) => setForm((f) => { const r = [...f.setupRules]; r[i] = { ...r[i], text: v }; return { ...f, setupRules: r }; });
-  const addObs = (ri) => setForm(f => {
+  const addObs = (ri, si) => setForm(f => {
     const rules = [...f.setupRules];
-    rules[ri] = { ...rules[ri], observations: [...(rules[ri].observations || []), { time: '', note: '' }] };
+    const scenarios = [...(rules[ri].scenarios || [])];
+    const scIdx = si ?? 0;
+    scenarios[scIdx] = { ...scenarios[scIdx], observations: [...(scenarios[scIdx]?.observations || []), { time: '', note: '' }] };
+    rules[ri] = { ...rules[ri], scenarios };
     return { ...f, setupRules: rules };
   });
-  const removeObs = (ri, oi) => setForm(f => {
+  const removeObs = (ri, si, oi) => setForm(f => {
     const rules = [...f.setupRules];
-    const obs = (rules[ri].observations || []).filter((_, idx) => idx !== oi);
-    rules[ri] = { ...rules[ri], observations: obs.length ? obs : [{ time: '', note: '' }] };
+    const scenarios = [...(rules[ri].scenarios || [])];
+    const scIdx = si ?? 0;
+    const obs = (scenarios[scIdx]?.observations || []).filter((_, idx) => idx !== oi);
+    scenarios[scIdx] = { ...scenarios[scIdx], observations: obs.length ? obs : [{ time: '', note: '' }] };
+    rules[ri] = { ...rules[ri], scenarios };
     return { ...f, setupRules: rules };
   });
-  const updateObs = (ri, oi, field, value) => setForm(f => {
+  const updateObs = (ri, si, oi, field, value) => setForm(f => {
     const rules = [...f.setupRules];
-    const obs = [...(rules[ri].observations || [])];
+    const scenarios = [...(rules[ri].scenarios || [])];
+    const scIdx = si ?? 0;
+    const obs = [...(scenarios[scIdx]?.observations || [])];
     obs[oi] = { ...obs[oi], [field]: value };
-    rules[ri] = { ...rules[ri], observations: obs };
+    scenarios[scIdx] = { ...scenarios[scIdx], observations: obs };
+    rules[ri] = { ...rules[ri], scenarios };
     return { ...f, setupRules: rules };
   });
   const removeRule = (i) => setForm((f) => {
@@ -418,12 +437,15 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const dragObsOver = useRef(null);
   const [dragObsOverKey, setDragObsOverKey] = useState(null); // `${ri}-${oi}`
 
-  const moveObs = (ri, from, to) => setForm(f => {
+  const moveObs = (ri, si, from, to) => setForm(f => {
     const rules = [...f.setupRules];
-    const obs = [...(rules[ri].observations || [])];
+    const scenarios = [...(rules[ri].scenarios || [])];
+    const scIdx = si ?? 0;
+    const obs = [...(scenarios[scIdx]?.observations || [])];
     const [m] = obs.splice(from, 1);
     obs.splice(to, 0, m);
-    rules[ri] = { ...rules[ri], observations: obs };
+    scenarios[scIdx] = { ...scenarios[scIdx], observations: obs };
+    rules[ri] = { ...rules[ri], scenarios };
     return { ...f, setupRules: rules };
   });
 
@@ -463,20 +485,21 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
     } finally { setAnalyzing(false); }
   };
 
-  const uploadObsImage = async (ri, oi, file) => {
-    const key = `${ri}-${oi}`;
+  const uploadObsImage = async (ri, si, oi, file) => {
+    const key = `${ri}-${si}-${oi}`;
     setObsUploadingKey(key);
     try {
       const fd = new FormData(); fd.append('chart', file);
       const { data } = await api.post('/charts/analyze-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (data.imageUrl) {
-        // Add to the top gallery and link on obs simultaneously
         setForm(f => {
           const rules = [...f.setupRules];
-          const obs = [...(rules[ri].observations || [])];
+          const scenarios = [...(rules[ri].scenarios || [])];
+          const obs = [...(scenarios[si]?.observations || [])];
           const note = obs[oi]?.note || '';
           obs[oi] = { ...obs[oi], imageUrl: data.imageUrl };
-          rules[ri] = { ...rules[ri], observations: obs };
+          scenarios[si] = { ...scenarios[si], observations: obs };
+          rules[ri] = { ...rules[ri], scenarios };
           return { ...f, setupRules: rules, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: note }] };
         });
         toast.success('Image added');
@@ -486,8 +509,8 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
     } finally { setObsUploadingKey(null); }
   };
 
-  const loadObsLink = async (ri, oi) => {
-    const key = `${ri}-${oi}`;
+  const loadObsLink = async (ri, si, oi) => {
+    const key = `${ri}-${si}-${oi}`;
     const url = (obsLinkUrls[key] || '').trim();
     if (!url) return;
     setObsUploadingKey(key);
@@ -496,10 +519,12 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
       if (data.imageUrl) {
         setForm(f => {
           const rules = [...f.setupRules];
-          const obs = [...(rules[ri].observations || [])];
+          const scenarios = [...(rules[ri].scenarios || [])];
+          const obs = [...(scenarios[si]?.observations || [])];
           const note = obs[oi]?.note || '';
           obs[oi] = { ...obs[oi], imageUrl: data.imageUrl };
-          rules[ri] = { ...rules[ri], observations: obs };
+          scenarios[si] = { ...scenarios[si], observations: obs };
+          rules[ri] = { ...rules[ri], scenarios };
           return { ...f, setupRules: rules, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: note }] };
         });
         setObsLinkUrls(prev => { const n = { ...prev }; delete n[key]; return n; });
@@ -532,9 +557,12 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         setupRules: form.setupRules.filter(r => r.isMasterRule || r.text || r.subs?.some(Boolean)),
         discoveries: (form.discoveries || []).filter(d => d.text?.trim()),
         events: (form.events || []).filter(e => e.type || e.description?.trim()),
+        newsEntries: (form.newsEntries || []).filter(e => e.description?.trim()),
         chartImages: (form.chartImages || []).filter(img => img.url?.trim()),
         chartImageUrl: form.chartImages?.[0]?.url || form.chartImageUrl || '',
         opportunities: cleanOpps,
+        // Backward-compat: flatten confluences from first opportunity to top-level
+        confluences: cleanOpps[0]?.confluences || [],
         // Backward-compat top-level fields from first opportunity
         bias: first.bias, timeOfTrade: first.timeOfTrade, outcome: first.outcome,
         maxRun: first.maxRun, entryTrigger: first.entryTrigger, pdArrayLevel: first.pdArrayLevel,
@@ -636,12 +664,18 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         {form.setupRules.some(r => r.isMasterRule) && (
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Core Rules Checklist</label>
-            <p className="text-xs text-gray-600 mb-2">Tick each rule that played out. Log the time and leave an observation where relevant.</p>
+            <p className="text-xs text-gray-600 mb-2">Tick each rule that played out. Toggle between scenario tabs to log observations for different outcomes.</p>
             <div className="space-y-2">
               {form.setupRules
                 .map((rule, i) => ({ rule, i }))
                 .filter(({ rule }) => rule.isMasterRule)
-                .map(({ rule, i }, idx) => (
+                .map(({ rule, i }, idx) => {
+                  const scenarios = rule.scenarios || [{ name: 'Default', observations: [{ time: '', note: '' }] }];
+                  const activeSi = activeScenarios[i] ?? 0;
+                  const activeScenario = scenarios[activeSi] || scenarios[0];
+                  const hasMultipleScenarios = scenarios.length > 1 || (scenarios.length === 1 && scenarios[0].name !== 'Default');
+
+                  return (
                   <div key={i} className={`border rounded-xl p-3 transition-colors ${rule.checked ? 'border-emerald-800 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'}`}>
                     <div className="flex items-start gap-3">
                       <input
@@ -663,9 +697,26 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                         ))}
                       </div>
                     </div>
+
+                    {/* Scenario tabs */}
+                    {hasMultipleScenarios && (
+                      <div className="ml-7 mt-2 flex gap-1 flex-wrap">
+                        {scenarios.map((sc, si) => (
+                          <button
+                            key={si}
+                            type="button"
+                            onClick={() => setActiveScenarios(prev => ({ ...prev, [i]: si }))}
+                            className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${activeSi === si ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-400 hover:text-gray-200'}`}
+                          >
+                            {sc.name || `Scenario ${si + 1}`}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="ml-7 mt-2 space-y-1">
-                      {(rule.observations || [{ time: '', note: '' }]).map((obs, oi) => {
-                        const obsKey = `${i}-${oi}`;
+                      {(activeScenario.observations || [{ time: '', note: '' }]).map((obs, oi) => {
+                        const obsKey = `${i}-${activeSi}-${oi}`;
                         const isUploading = obsUploadingKey === obsKey;
                         return (
                           <div key={oi} className="space-y-1">
@@ -676,7 +727,7 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                               onDragOver={(e) => e.preventDefault()}
                               onDragEnd={() => {
                                 if (dragObsRuleIndex.current === i && dragObsFrom.current !== null && dragObsOver.current !== null && dragObsFrom.current !== dragObsOver.current) {
-                                  moveObs(i, dragObsFrom.current, dragObsOver.current);
+                                  moveObs(i, activeSi, dragObsFrom.current, dragObsOver.current);
                                 }
                                 dragObsRuleIndex.current = null; dragObsFrom.current = null; dragObsOver.current = null; setDragObsOverKey(null);
                               }}
@@ -688,25 +739,24 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                               <input
                                 type="time"
                                 value={obs.time || ''}
-                                onChange={(e) => updateObs(i, oi, 'time', e.target.value)}
+                                onChange={(e) => updateObs(i, activeSi, oi, 'time', e.target.value)}
                                 className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
                               />
                               <input
                                 type="text"
                                 value={obs.note || ''}
-                                onChange={(e) => updateObs(i, oi, 'note', e.target.value)}
+                                onChange={(e) => updateObs(i, activeSi, oi, 'note', e.target.value)}
                                 placeholder="What happened…"
                                 className={`${inputCls} text-xs flex-1`}
                                 ref={(el) => { if (el) obsNoteRefs.current[obsKey] = el; else delete obsNoteRefs.current[obsKey]; }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    addObs(i);
-                                    setTimeout(() => obsNoteRefs.current[`${i}-${(rule.observations?.length ?? 1)}`]?.focus(), 0);
+                                    addObs(i, activeSi);
+                                    setTimeout(() => obsNoteRefs.current[`${i}-${activeSi}-${(activeScenario.observations?.length ?? 1)}`]?.focus(), 0);
                                   }
                                 }}
                               />
-                              {/* Photo upload button */}
                               <button
                                 type="button"
                                 disabled={isUploading}
@@ -718,7 +768,6 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                                   ? <span className="text-xs text-indigo-400 animate-pulse">…</span>
                                   : <PhotoIcon className="w-3.5 h-3.5" />}
                               </button>
-                              {/* TV link button */}
                               <button
                                 type="button"
                                 disabled={isUploading}
@@ -733,22 +782,21 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                                 accept="image/*"
                                 className="hidden"
                                 ref={(el) => { if (el) obsFileRefs.current[obsKey] = el; else delete obsFileRefs.current[obsKey]; }}
-                                onChange={(e) => { if (e.target.files[0]) { uploadObsImage(i, oi, e.target.files[0]); e.target.value = ''; } }}
+                                onChange={(e) => { if (e.target.files[0]) { uploadObsImage(i, activeSi, oi, e.target.files[0]); e.target.value = ''; } }}
                               />
-                              {(rule.observations?.length > 1) && (
-                                <button type="button" onClick={() => removeObs(i, oi)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors" title="Remove observation">
+                              {(activeScenario.observations?.length > 1) && (
+                                <button type="button" onClick={() => removeObs(i, activeSi, oi)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors" title="Remove observation">
                                   <TrashIcon className="w-3.5 h-3.5" />
                                 </button>
                               )}
                             </div>
-                            {/* TV link input row */}
                             {obsLinkKey === obsKey && (
                               <div className="ml-6 flex gap-2 items-center">
                                 <input
                                   type="url"
                                   value={obsLinkUrls[obsKey] || ''}
                                   onChange={(e) => setObsLinkUrls(prev => ({ ...prev, [obsKey]: e.target.value }))}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadObsLink(i, oi); } }}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadObsLink(i, activeSi, oi); } }}
                                   placeholder="https://www.tradingview.com/x/…"
                                   className={`${inputCls} text-xs flex-1`}
                                   autoFocus
@@ -756,7 +804,7 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                                 <button
                                   type="button"
                                   disabled={isUploading || !obsLinkUrls[obsKey]?.trim()}
-                                  onClick={() => loadObsLink(i, oi)}
+                                  onClick={() => loadObsLink(i, activeSi, oi)}
                                   className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap shrink-0"
                                 >
                                   {isUploading ? 'Loading…' : 'Load'}
@@ -778,9 +826,11 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                                     const urlToRemove = obs.imageUrl;
                                     setForm(f => {
                                       const rules = [...f.setupRules];
-                                      const obsArr = [...(rules[ri].observations || [])];
+                                      const scs = [...(rules[i].scenarios || [])];
+                                      const obsArr = [...(scs[activeSi]?.observations || [])];
                                       obsArr[oi] = { ...obsArr[oi], imageUrl: '' };
-                                      rules[ri] = { ...rules[ri], observations: obsArr };
+                                      scs[activeSi] = { ...scs[activeSi], observations: obsArr };
+                                      rules[i] = { ...rules[i], scenarios: scs };
                                       return { ...f, setupRules: rules, chartImages: f.chartImages.filter(img => img.url !== urlToRemove) };
                                     });
                                   }}
@@ -797,8 +847,8 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                       <button
                         type="button"
                         onClick={() => {
-                          addObs(i);
-                          setTimeout(() => obsNoteRefs.current[`${i}-${(rule.observations?.length ?? 1)}`]?.focus(), 0);
+                          addObs(i, activeSi);
+                          setTimeout(() => obsNoteRefs.current[`${i}-${activeSi}-${(activeScenario.observations?.length ?? 1)}`]?.focus(), 0);
                         }}
                         className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors"
                       >
@@ -806,7 +856,8 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         )}
@@ -927,31 +978,24 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
         </div>
       </div>
 
-      {/* Confluences */}
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-2">Confluences</label>
-        <div className="flex flex-wrap gap-1.5">
-          {ICT_TAGS.map((tag) => (
-            <Chip key={tag} label={tag} active={form.confluences.includes(tag)} onClick={() => toggleConfluence(tag)} />
-          ))}
-        </div>
-      </div>
-
       {/* ── Macro Windows ── */}
-      <div>
-        <SectionHeading>Macro Windows Touched</SectionHeading>
-        <p className="text-xs text-gray-500 mb-2">Select all macro windows that interacted with price in this setup</p>
-        <div className="flex flex-wrap gap-1.5">
-          {MACRO_WINDOWS.map((w) => (
-            <Chip key={w} label={w} active={form.macroWindows.includes(w)} onClick={() => setForm((f) => ({
-              ...f,
-              macroWindows: f.macroWindows.includes(w) ? f.macroWindows.filter((x) => x !== w) : [...f.macroWindows, w],
-            }))} />
-          ))}
+      {topicMacroWindows.length > 0 && (
+        <div>
+          <SectionHeading>Macro Windows Touched</SectionHeading>
+          <p className="text-xs text-gray-500 mb-2">Select all macro windows that interacted with price in this setup</p>
+          <div className="flex flex-wrap gap-1.5">
+            {topicMacroWindows.map((w) => (
+              <Chip key={w} label={w} active={form.macroWindows.includes(w)} onClick={() => setForm((f) => ({
+                ...f,
+                macroWindows: f.macroWindows.includes(w) ? f.macroWindows.filter((x) => x !== w) : [...f.macroWindows, w],
+              }))} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Liquidity ── */}
+      {studyParams.showLiquidity && (
       <div className="space-y-3">
         <SectionHeading>Liquidity</SectionHeading>
         <div>
@@ -1011,14 +1055,18 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── PD Array (shared context) ── */}
+      {studyParams.showPDArray && (
       <div>
         <SectionHeading>PD Array</SectionHeading>
         <input type="text" value={form.pdArray} onChange={set('pdArray')} placeholder="e.g. 1st Presented FVG, Breaker OB" className={inputCls} />
       </div>
+      )}
 
       {/* ── Market Structure ── */}
+      {studyParams.showMarketStructure && (
       <div className="space-y-3">
         <SectionHeading>Market Structure</SectionHeading>
         <div>
@@ -1037,6 +1085,7 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
           <Chip label="Engineered Liquidity Present" active={form.engineeredLiq} onClick={() => setForm((f) => ({ ...f, engineeredLiq: !f.engineeredLiq }))} />
         </div>
       </div>
+      )}
 
       {/* ── Session (shared) ── */}
       <div>
@@ -1157,15 +1206,89 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
               <input type="number" step="any" value={opp.mae} onChange={setOpp('mae')} placeholder="Max adverse" className={inputCls} />
             </div>
           </div>
+
+          {/* Per-opportunity Confluences */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-2">Confluences</label>
+            <div className="flex flex-wrap gap-1.5">
+              {ICT_TAGS.map((tag) => (
+                <Chip key={tag} label={tag} active={(opp.confluences || []).includes(tag)} onClick={() => toggleConfluence(tag)} />
+              ))}
+            </div>
+          </div>
         </div>
 
         <button type="button" onClick={addOpportunity} className="text-xs text-indigo-400 hover:underline">+ Add another trade opportunity</button>
       </div>
 
-      {/* Narrative + Notes */}
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">News</label>
-        <textarea rows={2} value={form.news || ''} onChange={set('news')} placeholder="Any relevant news events during this session? (optional)" className={`${inputCls} resize-none`} />
+      {/* News Entries */}
+      <div className="space-y-2">
+        <label className="block text-xs font-medium text-gray-400 mb-1">News Events</label>
+        {(form.newsEntries || []).map((entry, ni) => (
+          <div key={ni} className="flex gap-1.5 items-center">
+            <input
+              type="time"
+              value={entry.time || ''}
+              onChange={(e) => setForm(f => {
+                const entries = [...(f.newsEntries || [])];
+                entries[ni] = { ...entries[ni], time: e.target.value };
+                return { ...f, newsEntries: entries };
+              })}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
+            />
+            <div className="flex gap-1 shrink-0">
+              {[
+                { val: 'Red', cls: 'bg-rose-600 border-rose-500 text-white', inCls: 'bg-gray-800 border-gray-700 text-rose-400 hover:border-rose-500' },
+                { val: 'Orange', cls: 'bg-amber-600 border-amber-500 text-white', inCls: 'bg-gray-800 border-gray-700 text-amber-400 hover:border-amber-500' },
+                { val: 'Yellow', cls: 'bg-yellow-500 border-yellow-400 text-gray-900', inCls: 'bg-gray-800 border-gray-700 text-yellow-400 hover:border-yellow-500' },
+              ].map(({ val, cls, inCls }) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setForm(f => {
+                    const entries = [...(f.newsEntries || [])];
+                    entries[ni] = { ...entries[ni], severity: entries[ni].severity === val ? '' : val };
+                    return { ...f, newsEntries: entries };
+                  })}
+                  className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${entry.severity === val ? cls : inCls}`}
+                >
+                  {val}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={entry.description || ''}
+              onChange={(e) => setForm(f => {
+                const entries = [...(f.newsEntries || [])];
+                entries[ni] = { ...entries[ni], description: e.target.value };
+                return { ...f, newsEntries: entries };
+              })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setForm(f => ({ ...f, newsEntries: [...(f.newsEntries || []), { time: '', severity: '', description: '' }] }));
+                }
+              }}
+              placeholder="What happened…"
+              className={`${inputCls} text-xs flex-1`}
+            />
+            <button
+              type="button"
+              onClick={() => setForm(f => ({ ...f, newsEntries: (f.newsEntries || []).filter((_, idx) => idx !== ni) }))}
+              className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors"
+            >
+              <TrashIcon className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => setForm(f => ({ ...f, newsEntries: [...(f.newsEntries || []), { time: '', severity: '', description: '' }] }))}
+          className="text-xs text-indigo-400 hover:underline"
+        >
+          + Add news entry
+        </button>
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Narrative</label>
@@ -1274,18 +1397,22 @@ function SetupCard({ setup, onEdit, onDelete }) {
               </div>
             </div>
 
-            {setup.confluences?.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-2">
-                {setup.confluences.map((c) => (
-                  <span key={c} className="text-xs bg-indigo-950 text-indigo-300 border border-indigo-900 px-2 py-0.5 rounded-full">{c}</span>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const allConf = [...new Set(opps.flatMap(o => o.confluences || []))];
+              const conf = allConf.length ? allConf : (setup.confluences || []);
+              return conf.length > 0 ? (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {conf.map((c) => (
+                    <span key={c} className="text-xs bg-indigo-950 text-indigo-300 border border-indigo-900 px-2 py-0.5 rounded-full">{c}</span>
+                  ))}
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
 
         {/* Expandable details */}
-        {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes || setup.news ||
+        {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes || setup.news || setup.newsEntries?.length > 0 ||
           setup.sweepType || setup.sweepDirection || opps.some(o => o.entryTrigger) || setup.mssDirection || opps.some(o => o.targetLevel) ||
           setup.discoveries?.some(d => d.text)) && (
           <div className="border-t border-gray-800">
@@ -1324,6 +1451,34 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                   </div>
                                 ))}
                                 {(() => {
+                                  // Scenario-aware display
+                                  const scenarios = rObj.scenarios?.filter(s => s.observations?.some(o => o.time || o.note || o.imageUrl));
+                                  if (scenarios?.length) return (
+                                    <div className="mt-1 space-y-2">
+                                      {scenarios.map((sc, si) => (
+                                        <div key={si}>
+                                          {(scenarios.length > 1 || sc.name !== 'Default') && (
+                                            <p className="text-xs font-medium text-amber-400 mb-0.5">⤷ {sc.name}</p>
+                                          )}
+                                          <div className="space-y-1.5 ml-2">
+                                            {sc.observations.filter(o => o.time || o.note || o.imageUrl).map((o, oi) => (
+                                              <div key={oi}>
+                                                {(o.time || o.note) && (
+                                                  <p className="text-xs text-gray-500">
+                                                    {o.time ? <span className="text-gray-400 font-mono">@ {o.time}</span> : null}{o.time && o.note ? ' — ' : ''}{o.note}
+                                                  </p>
+                                                )}
+                                                {o.imageUrl && (
+                                                  <img src={o.imageUrl} alt="observation screenshot" className="mt-1 w-48 h-28 object-cover rounded-lg border border-gray-700 cursor-zoom-in" onClick={() => window.open(o.imageUrl, '_blank')} />
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                  // Legacy observations fallback
                                   const obs = (rObj.observations || []).filter(o => o.time || o.note || o.imageUrl);
                                   if (obs.length) return (
                                     <div className="mt-1 space-y-1.5">
@@ -1335,18 +1490,12 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                             </p>
                                           )}
                                           {o.imageUrl && (
-                                            <img
-                                              src={o.imageUrl}
-                                              alt="observation screenshot"
-                                              className="mt-1 w-48 h-28 object-cover rounded-lg border border-gray-700 cursor-zoom-in"
-                                              onClick={() => window.open(o.imageUrl, '_blank')}
-                                            />
+                                            <img src={o.imageUrl} alt="observation screenshot" className="mt-1 w-48 h-28 object-cover rounded-lg border border-gray-700 cursor-zoom-in" onClick={() => window.open(o.imageUrl, '_blank')} />
                                           )}
                                         </div>
                                       ))}
                                     </div>
                                   );
-                                  // Legacy fallback for data saved before observations array
                                   if (playedAt || comment) return (
                                     <p className="text-xs text-gray-500 mt-1">{playedAt ? `@ ${playedAt}` : ''}{playedAt && comment ? ' — ' : ''}{comment}</p>
                                   );
@@ -1360,10 +1509,25 @@ function SetupCard({ setup, onEdit, onDelete }) {
                     </ol>
                   </div>
                 )}
-                {setup.news && (
+                {(setup.newsEntries?.length > 0 || setup.news) && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">News</p>
-                    <p className="text-sm text-yellow-200/80 leading-relaxed">{setup.news}</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">News Events</p>
+                    {setup.newsEntries?.length > 0 ? (
+                      <div className="space-y-1">
+                        {setup.newsEntries.map((ne, ni) => {
+                          const sevColor = { Red: 'bg-rose-600 text-white', Orange: 'bg-amber-600 text-white', Yellow: 'bg-yellow-500 text-gray-900' }[ne.severity] || '';
+                          return (
+                            <div key={ni} className="flex gap-2 items-center text-sm">
+                              {ne.time && <span className="text-gray-400 font-mono text-xs shrink-0">{ne.time}</span>}
+                              {ne.severity && <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${sevColor}`}>{ne.severity}</span>}
+                              <span className="text-gray-300">{ne.description}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : setup.news ? (
+                      <p className="text-sm text-yellow-200/80 leading-relaxed">{setup.news}</p>
+                    ) : null}
                   </div>
                 )}
                 {setup.narrative && (
@@ -1429,11 +1593,17 @@ function SetupCard({ setup, onEdit, onDelete }) {
                             {o.entryLevel != null && o.entryLevel !== '' ? `Entry: ${o.entryLevel}` : ''}{o.stopLevel != null && o.stopLevel !== '' ? `  Stop: ${o.stopLevel}` : ''}
                           </p>
                         )}
+                        {o.confluences?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {o.confluences.map((c) => (
+                              <span key={c} className="text-xs bg-indigo-950 text-indigo-300 border border-indigo-900 px-2 py-0.5 rounded-full">{c}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
-                )}
 
                 {/* Discoveries */}
                 {setup.discoveries?.some(d => d.text) && (
@@ -1471,10 +1641,17 @@ function TopicModal({ initial, onSave, onClose }) {
     tags:        initial ? (typeof initial.tags === 'string' ? initial.tags : initial.tags?.join(', ') || '') : '',
     color:       initial?.color ?? '#6366f1',
     masterRules: initial?.masterRules?.length
-      ? initial.masterRules.map(r => typeof r === 'string' ? { text: r, subs: [] } : { text: r.text ?? '', subs: r.subs ?? [] })
+      ? initial.masterRules.map(r => typeof r === 'string' ? { text: r, subs: [], scenarios: [] } : { text: r.text ?? '', subs: r.subs ?? [], scenarios: r.scenarios ?? [] })
       : [],
+    macroWindows: initial?.macroWindows ?? [],
+    studyParameters: {
+      showLiquidity:       initial?.studyParameters?.showLiquidity ?? true,
+      showMarketStructure: initial?.studyParameters?.showMarketStructure ?? true,
+      showPDArray:         initial?.studyParameters?.showPDArray ?? true,
+    },
   });
   const [saving, setSaving] = useState(false);
+  const [macroInput, setMacroInput] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const setMasterRule = (i, v) => setForm(f => {
@@ -1497,6 +1674,16 @@ function TopicModal({ initial, onSave, onClose }) {
     const r = [...f.masterRules]; r[ri] = { ...r[ri], subs: (r[ri].subs || []).filter((_, i) => i !== si) }; return { ...f, masterRules: r };
   });
 
+  const addScenario = (ri) => setForm(f => {
+    const r = [...f.masterRules]; r[ri] = { ...r[ri], scenarios: [...(r[ri].scenarios || []), { name: '' }] }; return { ...f, masterRules: r };
+  });
+  const setScenarioName = (ri, si, v) => setForm(f => {
+    const r = [...f.masterRules]; const sc = [...(r[ri].scenarios || [])]; sc[si] = { ...sc[si], name: v }; r[ri] = { ...r[ri], scenarios: sc }; return { ...f, masterRules: r };
+  });
+  const removeScenario = (ri, si) => setForm(f => {
+    const r = [...f.masterRules]; r[ri] = { ...r[ri], scenarios: (r[ri].scenarios || []).filter((_, i) => i !== si) }; return { ...f, masterRules: r };
+  });
+
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
     setSaving(true);
@@ -1507,6 +1694,8 @@ function TopicModal({ initial, onSave, onClose }) {
         color: form.color,
         tags: typeof form.tags === 'string' ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : form.tags,
         masterRules: (form.masterRules || []).filter(r => r.text?.trim()),
+        macroWindows: form.macroWindows || [],
+        studyParameters: form.studyParameters,
       };
       let result;
       if (initial?._id) {
@@ -1592,9 +1781,90 @@ function TopicModal({ initial, onSave, onClose }) {
                     </button>
                   </div>
                 ))}
+                {/* Scenarios per rule */}
+                {(rule.scenarios || []).length > 0 && (
+                  <div className="ml-7 mt-1.5 space-y-1">
+                    <p className="text-xs text-gray-600">Scenarios (expected outcomes):</p>
+                    {rule.scenarios.map((sc, si) => (
+                      <div key={si} className="flex gap-2 items-center">
+                        <span className="text-xs text-amber-500 shrink-0 select-none">⤷</span>
+                        <input
+                          type="text"
+                          value={sc.name}
+                          onChange={(e) => setScenarioName(i, si, e.target.value)}
+                          placeholder={`e.g. If ${rule.text || 'rule'} ${si === 0 ? 'holds' : 'fails'}…`}
+                          className="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button type="button" onClick={() => removeScenario(i, si)} className="text-gray-600 hover:text-rose-400 shrink-0"><TrashIcon className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="ml-7 mt-1">
+                  <button type="button" onClick={() => addScenario(i)} className="text-xs text-amber-500 hover:text-amber-400 transition-colors">+ Add scenario</button>
+                </div>
               </div>
             ))}
-            <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '', subs: [] }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
+            <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '', subs: [], scenarios: [] }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
+          </div>
+        </div>
+
+        {/* Macro Windows */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Macro Windows</label>
+          <p className="text-xs text-gray-500 mb-2">Define the macro timing windows for this study (e.g. 9:30, 9:50, 10:10). These appear as selectable chips in setup forms.</p>
+          <div className="flex gap-2 items-center">
+            <input
+              type="text"
+              value={macroInput}
+              onChange={(e) => setMacroInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && macroInput.trim()) {
+                  e.preventDefault();
+                  const v = macroInput.trim();
+                  if (!form.macroWindows.includes(v)) setForm(f => ({ ...f, macroWindows: [...f.macroWindows, v] }));
+                  setMacroInput('');
+                }
+              }}
+              placeholder="e.g. 9:30 — press Enter to add"
+              className={`${inputCls} flex-1`}
+            />
+          </div>
+          {form.macroWindows.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {form.macroWindows.map((w) => (
+                <span key={w} className="text-xs bg-indigo-950 text-indigo-300 border border-indigo-900 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {w}
+                  <button type="button" onClick={() => setForm(f => ({ ...f, macroWindows: f.macroWindows.filter(x => x !== w) }))} className="text-indigo-400 hover:text-rose-400 leading-none">×</button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Study Parameters */}
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Study Parameters</label>
+          <p className="text-xs text-gray-500 mb-2">Choose which ICT mechanics sections appear when logging setups under this topic.</p>
+          <div className="space-y-2">
+            {[
+              { key: 'showLiquidity', label: 'Liquidity Profiling', desc: 'Sweep type, direction, target liquidity, quality' },
+              { key: 'showMarketStructure', label: 'Market Structure', desc: 'MSS direction, candle time, engineered liquidity' },
+              { key: 'showPDArray', label: 'PD Array', desc: 'Price delivery array input' },
+            ].map(({ key, label, desc }) => (
+              <label key={key} className="flex items-start gap-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={form.studyParameters[key]}
+                  onChange={(e) => setForm(f => ({ ...f, studyParameters: { ...f.studyParameters, [key]: e.target.checked } }))}
+                  className="mt-0.5 w-4 h-4 accent-indigo-500 cursor-pointer"
+                />
+                <div>
+                  <span className="text-sm text-gray-300 group-hover:text-gray-100 transition-colors">{label}</span>
+                  <p className="text-xs text-gray-600">{desc}</p>
+                </div>
+              </label>
+            ))}
           </div>
         </div>
 
@@ -1959,6 +2229,7 @@ export default function StudyCompanionPage() {
               <SetupForm
                 topicId={activeTopic._id}
                 topicMasterRules={activeTopic.masterRules}
+                topic={activeTopic}
                 initial={editingSetup}
                 onSave={handleSetupSaved}
                 onCancel={() => { setShowSetupForm(false); setEditingSetup(null); }}

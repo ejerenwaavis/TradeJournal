@@ -42,9 +42,9 @@ router.get('/topics', auth, async (req, res) => {
 // POST /api/study/topics
 router.post('/topics', auth, async (req, res) => {
   try {
-    const { name, description, tags, color, masterRules } = req.body;
+    const { name, description, tags, color, masterRules, macroWindows, studyParameters } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Topic name is required' });
-    const topic = await StudyTopic.create({ userId: req.userId, name: name.trim(), description, tags, color, masterRules });
+    const topic = await StudyTopic.create({ userId: req.userId, name: name.trim(), description, tags, color, masterRules, macroWindows, studyParameters });
     res.status(201).json({ topic });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -78,6 +78,8 @@ router.post('/topics/:id/clone', auth, async (req, res) => {
       tags: source.tags,
       color: source.color,
       masterRules: source.masterRules,
+      macroWindows: source.macroWindows,
+      studyParameters: source.studyParameters,
     });
     res.status(201).json({ topic: { ...clone.toObject(), setupCount: 0 } });
   } catch (err) {
@@ -136,7 +138,29 @@ router.get('/setups', auth, async (req, res) => {
     const filter = { userId: req.userId };
     if (req.query.topicId) filter.topicId = req.query.topicId;
     const setups = await StudySetup.find(filter).sort({ createdAt: -1 });
-    res.json({ setups });
+    // Migration shims for legacy data
+    const migrated = setups.map(s => {
+      const obj = s.toObject();
+      // Migrate legacy news string → newsEntries
+      if (!obj.newsEntries?.length && obj.news) {
+        obj.newsEntries = [{ time: '', severity: '', description: obj.news }];
+      }
+      // Migrate legacy observations → scenarios on rules
+      if (obj.setupRules?.length) {
+        obj.setupRules = obj.setupRules.map(r => {
+          if (r && r.observations?.length && !r.scenarios?.length) {
+            return { ...r, scenarios: [{ name: 'Default', observations: r.observations }] };
+          }
+          return r;
+        });
+      }
+      // Migrate top-level confluences → first opportunity
+      if (obj.confluences?.length && obj.opportunities?.length && !obj.opportunities[0]?.confluences?.length) {
+        obj.opportunities = obj.opportunities.map((o, i) => i === 0 ? { ...o, confluences: obj.confluences } : o);
+      }
+      return obj;
+    });
+    res.json({ setups: migrated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -147,7 +171,23 @@ router.get('/setups/:id', auth, async (req, res) => {
   try {
     const setup = await StudySetup.findOne({ _id: req.params.id, userId: req.userId });
     if (!setup) return res.status(404).json({ error: 'Setup not found' });
-    res.json({ setup });
+    const obj = setup.toObject();
+    // Migration shims
+    if (!obj.newsEntries?.length && obj.news) {
+      obj.newsEntries = [{ time: '', severity: '', description: obj.news }];
+    }
+    if (obj.setupRules?.length) {
+      obj.setupRules = obj.setupRules.map(r => {
+        if (r && r.observations?.length && !r.scenarios?.length) {
+          return { ...r, scenarios: [{ name: 'Default', observations: r.observations }] };
+        }
+        return r;
+      });
+    }
+    if (obj.confluences?.length && obj.opportunities?.length && !obj.opportunities[0]?.confluences?.length) {
+      obj.opportunities = obj.opportunities.map((o, i) => i === 0 ? { ...o, confluences: obj.confluences } : o);
+    }
+    res.json({ setup: obj });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -201,12 +241,13 @@ router.get('/analytics/:topicId', auth, async (req, res) => {
 
     const total = setups.length;
 
-    // Confluence hit rate
+    // Confluence hit rate — read from opportunities, fallback to top-level
     const confCount = {};
     setups.forEach((s) => {
-      (s.confluences || []).forEach((c) => {
-        confCount[c] = (confCount[c] || 0) + 1;
-      });
+      const allConfs = new Set();
+      (s.opportunities || []).forEach(o => (o?.confluences || []).forEach(c => allConfs.add(c)));
+      if (allConfs.size === 0) (s.confluences || []).forEach(c => allConfs.add(c));
+      allConfs.forEach(c => { confCount[c] = (confCount[c] || 0) + 1; });
     });
     const confluenceHitRate = Object.entries(confCount)
       .sort((a, b) => b[1] - a[1])
@@ -326,7 +367,11 @@ router.get('/analytics/global', auth, async (req, res) => {
     // ── Top confluence combinations (pairs + triples) ─────────────────────
     const comboMap = {};
     setups.forEach((s) => {
-      const confs = [...new Set(s.confluences || [])];
+      // Gather confluences from opportunities, fallback to top-level
+      const allConfs = new Set();
+      (s.opportunities || []).forEach(o => (o?.confluences || []).forEach(c => allConfs.add(c)));
+      if (allConfs.size === 0) (s.confluences || []).forEach(c => allConfs.add(c));
+      const confs = [...allConfs];
       if (confs.length < 2) return;
       const sizes = confs.length >= 3 ? [2, 3] : [2];
       sizes.forEach((k) => {
