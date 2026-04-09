@@ -1652,6 +1652,9 @@ function TopicModal({ initial, onSave, onClose }) {
   });
   const [saving, setSaving] = useState(false);
   const [macroInput, setMacroInput] = useState('');
+  const [dragOverMaster, setDragOverMaster] = useState(null);
+  const dragMasterFrom = useRef(null);
+  const dragMasterOver = useRef(null);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const setMasterRule = (i, v) => setForm(f => {
@@ -1663,6 +1666,7 @@ function TopicModal({ initial, onSave, onClose }) {
     return { ...f, masterRules: r };
   });
   const removeMasterRule = (i) => setForm(f => ({ ...f, masterRules: f.masterRules.filter((_, idx) => idx !== i) }));
+  const moveMasterRule = (from, to) => setForm(f => { const r = [...f.masterRules]; const [m] = r.splice(from, 1); r.splice(to, 0, m); return { ...f, masterRules: r }; });
   const setMasterSub = (ri, si, v) => setForm(f => {
     const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
     subs[si] = v; r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
@@ -1743,7 +1747,20 @@ function TopicModal({ initial, onSave, onClose }) {
           <div className="space-y-1.5">
             {(form.masterRules || []).map((rule, i) => (
               <div key={i}>
-                <div className="flex gap-2 items-center">
+                <div
+                  className={`flex gap-2 items-center ${dragOverMaster === i ? 'border-t-2 border-indigo-500' : ''}`}
+                  draggable
+                  onDragStart={() => { dragMasterFrom.current = i; }}
+                  onDragEnter={() => { dragMasterOver.current = i; setDragOverMaster(i); }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDragEnd={() => {
+                    if (dragMasterFrom.current !== null && dragMasterOver.current !== null && dragMasterFrom.current !== dragMasterOver.current) {
+                      moveMasterRule(dragMasterFrom.current, dragMasterOver.current);
+                    }
+                    dragMasterFrom.current = null; dragMasterOver.current = null; setDragOverMaster(null);
+                  }}
+                >
+                  <Bars3Icon className="w-4 h-4 text-gray-600 cursor-grab shrink-0" />
                   <span className="text-xs text-gray-600 w-5 text-right shrink-0">{i + 1}.</span>
                   <input
                     type="text"
