@@ -127,7 +127,7 @@ export default function AnalyticsPage() {
         const best  = qualified.reduce((a, b) => b.winRate > a.winRate ? b : a);
         const worst = qualified.reduce((a, b) => b.winRate < a.winRate ? b : a);
         return (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-emerald-950 border border-emerald-800 rounded-xl p-4 flex items-center gap-4">
               <div className="text-2xl">🏆</div>
               <div>

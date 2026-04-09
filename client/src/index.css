@@ -32,6 +32,24 @@ body {
   margin: 0;
   width: 100%;
   min-height: 100vh;
+  /* Prevent horizontal overflow on mobile */
+  overflow-x: hidden;
+}
+
+/* Smooth scrolling everywhere */
+html {
+  scroll-behavior: smooth;
+  /* Support iOS safe-area insets */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Ensure all buttons get minimum tap-target height on touch */
+@media (hover: none) and (pointer: coarse) {
+  button, a[role="button"] {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 #root {

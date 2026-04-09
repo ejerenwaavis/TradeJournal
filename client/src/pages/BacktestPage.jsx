@@ -217,14 +217,14 @@ export default function BacktestPage() {
           </button>
         </div>
         {showNewProj && (
-          <div className="mt-3 grid grid-cols-3 gap-3 pt-3 border-t border-gray-800">
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-gray-800">
             <input type="text" value={newProjName} onChange={(e) => setNewProjName(e.target.value)}
               placeholder="Project name *" className={inputCls} />
             <input type="text" value={newProjStrategy} onChange={(e) => setNewProjStrategy(e.target.value)}
               placeholder="Strategy (e.g. MMXM)" className={inputCls} />
             <input type="text" value={newProjInstrument} onChange={(e) => setNewProjInstrument(e.target.value)}
               placeholder="Instrument (e.g. MNQ)" className={inputCls} />
-            <div className="col-span-3 flex gap-2">
+            <div className="col-span-1 sm:col-span-3 flex gap-2">
               <button onClick={createProject} className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 rounded-lg">Create</button>
               <button onClick={() => setShowNewProj(false)} className="text-sm text-gray-400 hover:text-gray-200 px-3 py-2">Cancel</button>
             </div>
@@ -342,7 +342,7 @@ export default function BacktestPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Instrument</label>
                 <input type="text" value={form.instrument} onChange={set('instrument')} placeholder="MNQH2026" className={inputCls} />
@@ -362,7 +362,7 @@ export default function BacktestPage() {
         <div className="space-y-4">
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Price Levels</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[['Entry', 'entryPrice'], ['Stop Loss', 'stopLoss'], ['Take Profit 1', 'takeProfit1'], ['Take Profit 2', 'takeProfit2']].map(([lbl, key]) => (
                 <div key={key}>
                   <label className="block text-xs text-gray-400 mb-1">{lbl}</label>
@@ -394,7 +394,7 @@ export default function BacktestPage() {
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Outcome (optional — fill later)</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Result</label>
                 <select value={form.result} onChange={set('result')} className={selectCls}>

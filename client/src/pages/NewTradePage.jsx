@@ -275,7 +275,7 @@ export default function NewTradePage() {
             )}
 
             {/* Core fields — just what AI can't fill */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Instrument *">
                 <input type="text" value={form.instrument} onChange={set('instrument')} placeholder="EURUSD" className={inputCls} />
               </Field>
@@ -310,7 +310,7 @@ export default function NewTradePage() {
             {/* Outcome */}
             <div className="border-t border-gray-800 pt-4">
               <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Outcome</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Status">
                   <select value={form.status} onChange={set('status')} className={selectCls}>
                     <option value="open">Open (in progress)</option>
@@ -342,7 +342,7 @@ export default function NewTradePage() {
             {/* Advanced — collapsed, pre-filled by AI */}
             <details className="border-t border-gray-800 pt-3">
               <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300 select-none">▸ Advanced fields (prices, setup, dates — pre-filled by AI)</summary>
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <Field label="Timeframe">
                   <select value={form.timeframe} onChange={set('timeframe')} className={selectCls}>
                     <option value="">—</option>
@@ -405,7 +405,7 @@ export default function NewTradePage() {
         {/* STEP 2 — Notes & Emotion */}
         {step === 2 && (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Pre-Trade Emotion">
                 <select value={form.emotionPreTrade} onChange={set('emotionPreTrade')} className={selectCls}>
                   <option value="">—</option>
