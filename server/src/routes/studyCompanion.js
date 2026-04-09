@@ -145,13 +145,18 @@ router.get('/setups', auth, async (req, res) => {
       if (!obj.newsEntries?.length && obj.news) {
         obj.newsEntries = [{ time: '', severity: '', description: obj.news }];
       }
-      // Migrate legacy observations → scenarios on rules
+      // Migrate legacy observations → scenarios on rules; string subs → objects
       if (obj.setupRules?.length) {
         obj.setupRules = obj.setupRules.map(r => {
-          if (r && r.observations?.length && !r.scenarios?.length) {
-            return { ...r, scenarios: [{ name: 'Default', observations: r.observations }] };
+          if (!r) return r;
+          let updated = r;
+          if (r.observations?.length && !r.scenarios?.length) {
+            updated = { ...updated, scenarios: [{ name: 'Default', observations: r.observations }] };
           }
-          return r;
+          if (r.isMasterRule && Array.isArray(r.subs)) {
+            updated = { ...updated, subs: r.subs.map(sub => typeof sub === 'string' ? { text: sub, scenarios: [] } : sub) };
+          }
+          return updated;
         });
       }
       // Migrate top-level confluences → first opportunity
@@ -178,10 +183,15 @@ router.get('/setups/:id', auth, async (req, res) => {
     }
     if (obj.setupRules?.length) {
       obj.setupRules = obj.setupRules.map(r => {
-        if (r && r.observations?.length && !r.scenarios?.length) {
-          return { ...r, scenarios: [{ name: 'Default', observations: r.observations }] };
+        if (!r) return r;
+        let updated = r;
+        if (r.observations?.length && !r.scenarios?.length) {
+          updated = { ...updated, scenarios: [{ name: 'Default', observations: r.observations }] };
         }
-        return r;
+        if (r.isMasterRule && Array.isArray(r.subs)) {
+          updated = { ...updated, subs: r.subs.map(sub => typeof sub === 'string' ? { text: sub, scenarios: [] } : sub) };
+        }
+        return updated;
       });
     }
     if (obj.confluences?.length && obj.opportunities?.length && !obj.opportunities[0]?.confluences?.length) {
