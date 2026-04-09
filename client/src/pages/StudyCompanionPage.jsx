@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { ICT_TAGS } from '../utils/ictTags';
-import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon } from '@heroicons/react/24/outline';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const SESSIONS = ['Asia', 'London', 'New York', 'London-NY Overlap'];
@@ -248,7 +248,7 @@ const OPP_KEYS = Object.keys(BLANK_OPPORTUNITY);
 const BLANK_SETUP = {
   title: '', tvLink: '', chartImageUrl: '', chartImages: [],
   setupRules: [{ text: '', subs: [] }],
-  confluences: [], session: '', narrative: '', notes: '',
+  confluences: [], session: '', narrative: '', notes: '', news: '',
   macroWindows: [],
   liquiditySwept: [], sweepType: '', sweepDirection: '', targetLiquidity: '', liquidityQuality: '',
   pdArray: '', mssDirection: '', mssTime: '', engineeredLiq: false,
@@ -259,9 +259,9 @@ const BLANK_SETUP = {
 function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const baseRules = topicMasterRules?.length
     ? topicMasterRules.map(r => typeof r === 'string'
-        ? { text: r, subs: [], isMasterRule: true, checked: false, comment: '', playedAt: '' }
-        : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: true, checked: false, comment: '', playedAt: '' })
-    : [{ text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' }];
+        ? { text: r, subs: [], isMasterRule: true, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] }
+        : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: true, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] })
+    : [{ text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] }];
 
   // Migrate legacy per-trade fields into opportunities[0] for older setups
   const migrateOpps = (s) => {
@@ -274,9 +274,16 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial ? {
     ...initial,
     setupRules: (initial.setupRules?.length
-      ? initial.setupRules.map(r => typeof r === 'string'
-          ? { text: r, subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' }
-          : { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, comment: r.comment ?? '', playedAt: r.playedAt ?? '' })
+      ? initial.setupRules.map(r => {
+          if (typeof r === 'string') return { text: r, subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] };
+          // Migrate legacy playedAt/comment into observations array
+          const obs = r.observations?.length
+            ? r.observations
+            : (r.playedAt || r.comment)
+              ? [{ time: r.playedAt || '', note: r.comment || '' }]
+              : [{ time: '', note: '' }];
+          return { text: r.text ?? '', subs: r.subs ?? [], isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, comment: r.comment ?? '', playedAt: r.playedAt ?? '', observations: obs };
+        })
       : baseRules),
     chartImages: initial.chartImages?.length
       ? initial.chartImages
@@ -300,7 +307,11 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const [liqInput, setLiqInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [obsUploadingKey, setObsUploadingKey] = useState(null);
+  const [obsLinkKey, setObsLinkKey] = useState(null); // which obs has link input open
+  const [obsLinkUrls, setObsLinkUrls] = useState({}); // { '${ri}-${oi}': url }
   const fileRef = useRef();
+  const obsFileRefs = useRef({});
   const discRefs = useRef({});
 
   // Opportunity helpers
@@ -344,12 +355,30 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const addRule = (afterIndex) => setForm((f) => {
     const r = [...f.setupRules];
     const at = afterIndex !== undefined ? afterIndex + 1 : r.length;
-    r.splice(at, 0, { text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '' });
+    r.splice(at, 0, { text: '', subs: [], isMasterRule: false, checked: false, comment: '', playedAt: '', observations: [{ time: '', note: '' }] });
     setTimeout(() => ruleInputRefs.current[`r-${at}`]?.focus(), 0);
     return { ...f, setupRules: r };
   });
   const updateRule = (i, fields) => setForm(f => { const r = [...f.setupRules]; r[i] = { ...r[i], ...fields }; return { ...f, setupRules: r }; });
   const setRule = (i, v) => setForm((f) => { const r = [...f.setupRules]; r[i] = { ...r[i], text: v }; return { ...f, setupRules: r }; });
+  const addObs = (ri) => setForm(f => {
+    const rules = [...f.setupRules];
+    rules[ri] = { ...rules[ri], observations: [...(rules[ri].observations || []), { time: '', note: '' }] };
+    return { ...f, setupRules: rules };
+  });
+  const removeObs = (ri, oi) => setForm(f => {
+    const rules = [...f.setupRules];
+    const obs = (rules[ri].observations || []).filter((_, idx) => idx !== oi);
+    rules[ri] = { ...rules[ri], observations: obs.length ? obs : [{ time: '', note: '' }] };
+    return { ...f, setupRules: rules };
+  });
+  const updateObs = (ri, oi, field, value) => setForm(f => {
+    const rules = [...f.setupRules];
+    const obs = [...(rules[ri].observations || [])];
+    obs[oi] = { ...obs[oi], [field]: value };
+    rules[ri] = { ...rules[ri], observations: obs };
+    return { ...f, setupRules: rules };
+  });
   const removeRule = (i) => setForm((f) => {
     if (f.setupRules.length <= 1) return f;
     const r = f.setupRules.filter((_, idx) => idx !== i);
@@ -383,6 +412,33 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
   const dragOverRuleIndex = useRef(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
 
+  // Obs drag state — keyed per rule index
+  const dragObsRuleIndex = useRef(null);
+  const dragObsFrom = useRef(null);
+  const dragObsOver = useRef(null);
+  const [dragObsOverKey, setDragObsOverKey] = useState(null); // `${ri}-${oi}`
+
+  const moveObs = (ri, from, to) => setForm(f => {
+    const rules = [...f.setupRules];
+    const obs = [...(rules[ri].observations || [])];
+    const [m] = obs.splice(from, 1);
+    obs.splice(to, 0, m);
+    rules[ri] = { ...rules[ri], observations: obs };
+    return { ...f, setupRules: rules };
+  });
+
+  const obsNoteRefs = useRef({});
+
+  const dragImgFrom = useRef(null);
+  const dragImgOver = useRef(null);
+  const [dragImgOverIdx, setDragImgOverIdx] = useState(null);
+  const moveImg = (from, to) => setForm(f => {
+    const imgs = [...f.chartImages];
+    const [m] = imgs.splice(from, 1);
+    imgs.splice(to, 0, m);
+    return { ...f, chartImages: imgs };
+  });
+
   const analyzeLink = async () => {
     if (!form.tvLink.trim()) { toast.error('Paste a TradingView link first'); return; }
     setAnalyzing(true);
@@ -405,6 +461,54 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
     } catch (err) {
       toast.error(err.response?.data?.error || 'Upload failed');
     } finally { setAnalyzing(false); }
+  };
+
+  const uploadObsImage = async (ri, oi, file) => {
+    const key = `${ri}-${oi}`;
+    setObsUploadingKey(key);
+    try {
+      const fd = new FormData(); fd.append('chart', file);
+      const { data } = await api.post('/charts/analyze-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (data.imageUrl) {
+        // Add to the top gallery and link on obs simultaneously
+        setForm(f => {
+          const rules = [...f.setupRules];
+          const obs = [...(rules[ri].observations || [])];
+          const note = obs[oi]?.note || '';
+          obs[oi] = { ...obs[oi], imageUrl: data.imageUrl };
+          rules[ri] = { ...rules[ri], observations: obs };
+          return { ...f, setupRules: rules, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: note }] };
+        });
+        toast.success('Image added');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Upload failed');
+    } finally { setObsUploadingKey(null); }
+  };
+
+  const loadObsLink = async (ri, oi) => {
+    const key = `${ri}-${oi}`;
+    const url = (obsLinkUrls[key] || '').trim();
+    if (!url) return;
+    setObsUploadingKey(key);
+    try {
+      const { data } = await api.post('/charts/analyze', { tvLink: url });
+      if (data.imageUrl) {
+        setForm(f => {
+          const rules = [...f.setupRules];
+          const obs = [...(rules[ri].observations || [])];
+          const note = obs[oi]?.note || '';
+          obs[oi] = { ...obs[oi], imageUrl: data.imageUrl };
+          rules[ri] = { ...rules[ri], observations: obs };
+          return { ...f, setupRules: rules, chartImages: [...(f.chartImages || []), { url: data.imageUrl, caption: note }] };
+        });
+        setObsLinkUrls(prev => { const n = { ...prev }; delete n[key]; return n; });
+        setObsLinkKey(null);
+        toast.success('Image loaded');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to load link');
+    } finally { setObsUploadingKey(null); }
   };
 
   const handleSave = async () => {
@@ -480,10 +584,29 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
           {(form.chartImages?.length > 0) && <span className="ml-auto text-gray-600">{form.chartImages.length} image{form.chartImages.length !== 1 ? 's' : ''}</span>}
         </div>
         {(form.chartImages?.length > 0) && (
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
             {form.chartImages.map((img, idx) => (
-              <div key={idx} className="rounded-lg border border-gray-700 overflow-hidden bg-gray-800">
-                <img src={img.url} alt={`chart ${idx + 1}`} className="w-full max-h-40 object-contain" />
+              <div
+                key={idx}
+                draggable
+                onDragStart={() => { dragImgFrom.current = idx; }}
+                onDragEnter={() => { dragImgOver.current = idx; setDragImgOverIdx(idx); }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnd={() => {
+                  if (dragImgFrom.current !== null && dragImgOver.current !== null && dragImgFrom.current !== dragImgOver.current) {
+                    moveImg(dragImgFrom.current, dragImgOver.current);
+                  }
+                  dragImgFrom.current = null; dragImgOver.current = null; setDragImgOverIdx(null);
+                }}
+                className={`rounded-lg border overflow-hidden bg-gray-800 transition-colors ${dragImgOverIdx === idx ? 'border-indigo-500' : 'border-gray-700'}`}
+              >
+                <div className="relative">
+                  <img src={img.url} alt={`chart ${idx + 1}`} className="w-full h-28 object-cover" />
+                  <div className="absolute top-1.5 left-1.5 bg-black/60 rounded px-1.5 py-0.5 flex items-center gap-1 cursor-grab active:cursor-grabbing">
+                    <Bars3Icon className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-xs text-gray-400 font-medium">{idx + 1}</span>
+                  </div>
+                </div>
                 <div className="flex gap-2 p-2 items-center border-t border-gray-700">
                   <input
                     type="text"
@@ -540,23 +663,147 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
                         ))}
                       </div>
                     </div>
-                    <div className="ml-7 mt-2 space-y-1.5">
-                      <div className="flex gap-2 items-center">
-                        <label className="text-xs text-gray-600 shrink-0 w-16">Played at</label>
-                        <input
-                          type="time"
-                          value={rule.playedAt || ''}
-                          onChange={(e) => updateRule(i, { playedAt: e.target.value })}
-                          className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        value={rule.comment || ''}
-                        onChange={(e) => updateRule(i, { comment: e.target.value })}
-                        placeholder="Observation for this setup…"
-                        className={`${inputCls} text-xs`}
-                      />
+                    <div className="ml-7 mt-2 space-y-1">
+                      {(rule.observations || [{ time: '', note: '' }]).map((obs, oi) => {
+                        const obsKey = `${i}-${oi}`;
+                        const isUploading = obsUploadingKey === obsKey;
+                        return (
+                          <div key={oi} className="space-y-1">
+                            <div
+                              draggable
+                              onDragStart={() => { dragObsRuleIndex.current = i; dragObsFrom.current = oi; }}
+                              onDragEnter={() => { dragObsOver.current = oi; setDragObsOverKey(obsKey); }}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDragEnd={() => {
+                                if (dragObsRuleIndex.current === i && dragObsFrom.current !== null && dragObsOver.current !== null && dragObsFrom.current !== dragObsOver.current) {
+                                  moveObs(i, dragObsFrom.current, dragObsOver.current);
+                                }
+                                dragObsRuleIndex.current = null; dragObsFrom.current = null; dragObsOver.current = null; setDragObsOverKey(null);
+                              }}
+                              className={`flex gap-1.5 items-center rounded-lg transition-colors ${dragObsOverKey === obsKey ? 'bg-indigo-950/60 border border-indigo-700' : 'border border-transparent'}`}
+                            >
+                              <span className="text-gray-700 cursor-grab active:cursor-grabbing shrink-0 hover:text-gray-500 transition-colors px-0.5">
+                                <Bars3Icon className="w-3.5 h-3.5" />
+                              </span>
+                              <input
+                                type="time"
+                                value={obs.time || ''}
+                                onChange={(e) => updateObs(i, oi, 'time', e.target.value)}
+                                className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 shrink-0"
+                              />
+                              <input
+                                type="text"
+                                value={obs.note || ''}
+                                onChange={(e) => updateObs(i, oi, 'note', e.target.value)}
+                                placeholder="What happened…"
+                                className={`${inputCls} text-xs flex-1`}
+                                ref={(el) => { if (el) obsNoteRefs.current[obsKey] = el; else delete obsNoteRefs.current[obsKey]; }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addObs(i);
+                                    setTimeout(() => obsNoteRefs.current[`${i}-${(rule.observations?.length ?? 1)}`]?.focus(), 0);
+                                  }
+                                }}
+                              />
+                              {/* Photo upload button */}
+                              <button
+                                type="button"
+                                disabled={isUploading}
+                                onClick={() => obsFileRefs.current[obsKey]?.click()}
+                                className={`shrink-0 transition-colors ${obs.imageUrl ? 'text-indigo-400 hover:text-indigo-300' : 'text-gray-600 hover:text-indigo-400'} disabled:opacity-40`}
+                                title={obs.imageUrl ? 'Replace image (upload)' : 'Attach screenshot'}
+                              >
+                                {isUploading
+                                  ? <span className="text-xs text-indigo-400 animate-pulse">…</span>
+                                  : <PhotoIcon className="w-3.5 h-3.5" />}
+                              </button>
+                              {/* TV link button */}
+                              <button
+                                type="button"
+                                disabled={isUploading}
+                                onClick={() => setObsLinkKey(obsLinkKey === obsKey ? null : obsKey)}
+                                className={`shrink-0 transition-colors ${obsLinkKey === obsKey ? 'text-indigo-400' : obs.imageUrl ? 'text-indigo-400 hover:text-indigo-300' : 'text-gray-600 hover:text-indigo-400'} disabled:opacity-40`}
+                                title="Load from TradingView link"
+                              >
+                                <LinkIcon className="w-3.5 h-3.5" />
+                              </button>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                ref={(el) => { if (el) obsFileRefs.current[obsKey] = el; else delete obsFileRefs.current[obsKey]; }}
+                                onChange={(e) => { if (e.target.files[0]) { uploadObsImage(i, oi, e.target.files[0]); e.target.value = ''; } }}
+                              />
+                              {(rule.observations?.length > 1) && (
+                                <button type="button" onClick={() => removeObs(i, oi)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors" title="Remove observation">
+                                  <TrashIcon className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {/* TV link input row */}
+                            {obsLinkKey === obsKey && (
+                              <div className="ml-6 flex gap-2 items-center">
+                                <input
+                                  type="url"
+                                  value={obsLinkUrls[obsKey] || ''}
+                                  onChange={(e) => setObsLinkUrls(prev => ({ ...prev, [obsKey]: e.target.value }))}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); loadObsLink(i, oi); } }}
+                                  placeholder="https://www.tradingview.com/x/…"
+                                  className={`${inputCls} text-xs flex-1`}
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isUploading || !obsLinkUrls[obsKey]?.trim()}
+                                  onClick={() => loadObsLink(i, oi)}
+                                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap shrink-0"
+                                >
+                                  {isUploading ? 'Loading…' : 'Load'}
+                                </button>
+                                <button type="button" onClick={() => setObsLinkKey(null)} className="text-xs text-gray-500 hover:text-gray-300 shrink-0">✕</button>
+                              </div>
+                            )}
+                            {obs.imageUrl && (
+                              <div className="ml-6 flex items-start gap-2">
+                                <img
+                                  src={obs.imageUrl}
+                                  alt="observation screenshot"
+                                  className="w-32 h-20 object-cover rounded-lg border border-gray-700 cursor-zoom-in"
+                                  onClick={() => window.open(obs.imageUrl, '_blank')}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const urlToRemove = obs.imageUrl;
+                                    setForm(f => {
+                                      const rules = [...f.setupRules];
+                                      const obsArr = [...(rules[ri].observations || [])];
+                                      obsArr[oi] = { ...obsArr[oi], imageUrl: '' };
+                                      rules[ri] = { ...rules[ri], observations: obsArr };
+                                      return { ...f, setupRules: rules, chartImages: f.chartImages.filter(img => img.url !== urlToRemove) };
+                                    });
+                                  }}
+                                  className="text-xs text-gray-600 hover:text-rose-400 mt-1 transition-colors"
+                                  title="Unlink and remove from gallery"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addObs(i);
+                          setTimeout(() => obsNoteRefs.current[`${i}-${(rule.observations?.length ?? 1)}`]?.focus(), 0);
+                        }}
+                        className="text-xs text-indigo-500 hover:text-indigo-400 transition-colors"
+                      >
+                        + Add observation
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -917,6 +1164,10 @@ function SetupForm({ topicId, topicMasterRules, initial, onSave, onCancel }) {
 
       {/* Narrative + Notes */}
       <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1">News</label>
+        <textarea rows={2} value={form.news || ''} onChange={set('news')} placeholder="Any relevant news events during this session? (optional)" className={`${inputCls} resize-none`} />
+      </div>
+      <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Narrative</label>
         <textarea rows={3} value={form.narrative} onChange={set('narrative')} placeholder="What is the story behind this setup?" className={`${inputCls} resize-none`} />
       </div>
@@ -1034,7 +1285,7 @@ function SetupCard({ setup, onEdit, onDelete }) {
         </div>
 
         {/* Expandable details */}
-        {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes ||
+        {(setup.setupRules?.some(r => typeof r === 'string' ? r : r?.text || r?.subs?.some(Boolean)) || setup.narrative || setup.notes || setup.news ||
           setup.sweepType || setup.sweepDirection || opps.some(o => o.entryTrigger) || setup.mssDirection || opps.some(o => o.targetLevel) ||
           setup.discoveries?.some(d => d.text)) && (
           <div className="border-t border-gray-800">
@@ -1064,7 +1315,7 @@ function SetupCard({ setup, onEdit, onDelete }) {
                               </span>
                               <div className="flex-1 min-w-0">
                                 <p className={`text-sm leading-snug ${isMasterRule && checked ? 'text-emerald-300' : isMasterRule && !checked ? 'text-gray-500' : 'text-gray-300'}`}>
-                                  {text}{playedAt ? <span className="text-xs text-gray-500 ml-2">@ {playedAt}</span> : null}
+                                  {text}
                                 </p>
                                 {(subs).filter(Boolean).map((s, j) => (
                                   <div key={j} className="flex gap-1.5 ml-2 mt-0.5">
@@ -1072,13 +1323,47 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                     <span className="text-xs text-gray-500 leading-relaxed">{s}</span>
                                   </div>
                                 ))}
-                                {comment && <p className="text-xs text-gray-500 italic mt-1">{comment}</p>}
+                                {(() => {
+                                  const obs = (rObj.observations || []).filter(o => o.time || o.note || o.imageUrl);
+                                  if (obs.length) return (
+                                    <div className="mt-1 space-y-1.5">
+                                      {obs.map((o, oi) => (
+                                        <div key={oi}>
+                                          {(o.time || o.note) && (
+                                            <p className="text-xs text-gray-500">
+                                              {o.time ? <span className="text-gray-400 font-mono">@ {o.time}</span> : null}{o.time && o.note ? ' — ' : ''}{o.note}
+                                            </p>
+                                          )}
+                                          {o.imageUrl && (
+                                            <img
+                                              src={o.imageUrl}
+                                              alt="observation screenshot"
+                                              className="mt-1 w-48 h-28 object-cover rounded-lg border border-gray-700 cursor-zoom-in"
+                                              onClick={() => window.open(o.imageUrl, '_blank')}
+                                            />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                  // Legacy fallback for data saved before observations array
+                                  if (playedAt || comment) return (
+                                    <p className="text-xs text-gray-500 mt-1">{playedAt ? `@ ${playedAt}` : ''}{playedAt && comment ? ' — ' : ''}{comment}</p>
+                                  );
+                                  return null;
+                                })()}
                               </div>
                             </div>
                           </li>
                         );
                       })}
                     </ol>
+                  </div>
+                )}
+                {setup.news && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">News</p>
+                    <p className="text-sm text-yellow-200/80 leading-relaxed">{setup.news}</p>
                   </div>
                 )}
                 {setup.narrative && (
