@@ -2099,7 +2099,7 @@ function MasterRulesCard({ topic, onEdit }) {
                       {subs.map((s, j) => (
                         <div key={j} className="flex gap-1.5 ml-5 mt-0.5">
                           <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
-                          <span className="text-xs text-gray-500 leading-relaxed">{s}</span>
+                          <span className="text-xs text-gray-500 leading-relaxed">{typeof s === 'string' ? s : s.text}</span>
                         </div>
                       ))}
                     </li>
