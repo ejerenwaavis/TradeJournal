@@ -17,6 +17,7 @@ import {
   MoonIcon,
   Bars3Icon,
   XMarkIcon,
+  BuildingLibraryIcon,
 } from '@heroicons/react/24/outline';
 
 const links = [
@@ -28,6 +29,7 @@ const links = [
   { to: '/backtests', icon: BeakerIcon, label: 'Backtesting' },
   { to: '/flashcards', icon: RectangleStackIcon, label: 'Flashcards' },
   { to: '/study', icon: BookOpenIcon, label: 'Study' },
+  { to: '/rules', icon: BuildingLibraryIcon, label: 'Rule Library' },
   { to: '/settings', icon: Cog6ToothIcon, label: 'Settings' },
 ];
 

@@ -37,6 +37,7 @@ export default function StudyAnalyticsPage() {
 
   const maxComboCount = data.topCombos?.[0]?.appearances || 1;
   const maxHour = Math.max(...(data.timeHeatmap?.map((h) => h.count) || [1]));
+  const maxDowCount = Math.max(...(data.dayOfWeekMatrix?.map(d => d.count) || [1]));
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16">
@@ -45,9 +46,12 @@ export default function StudyAnalyticsPage() {
         <p className="text-sm text-gray-500 mt-1">Cross-topic confluence performance — based on {data.total} total setups</p>
       </div>
 
-      {/* ── Bias accuracy ─────────────────────────────────────────────────────── */}
+      {/* ── Summary stats ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatBlock label="Total Setups" value={data.total} />
+        {data.avgCompletionRate != null && (
+          <StatBlock label="Avg Rule Completion" value={`${data.avgCompletionRate}%`} sub="rules fired per session" />
+        )}
         {data.biasAccuracy?.Bullish && (
           <StatBlock
             label="Bullish Bias Accuracy"
@@ -70,6 +74,57 @@ export default function StudyAnalyticsPage() {
           />
         )}
       </div>
+
+      {/* ── Clarity Score Distribution (Phase 5) ───────────────────────────── */}
+      {data.clarityDist?.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <SectionHeading>Session Clarity Distribution</SectionHeading>
+          <div className="grid grid-cols-3 gap-3">
+            {data.clarityDist.map(c => (
+              <div key={c.score} className={`rounded-xl p-4 text-center border ${c.score === 3 ? 'border-emerald-700 bg-emerald-900/20' : c.score === 2 ? 'border-amber-700 bg-amber-900/20' : 'border-gray-600 bg-gray-800'}`}>
+                <p className={`text-xs font-medium mb-1 ${c.score === 3 ? 'text-emerald-400' : c.score === 2 ? 'text-amber-400' : 'text-gray-400'}`}>{c.label} (C{c.score})</p>
+                <p className="text-2xl font-bold text-gray-100">{c.count}</p>
+                {c.textbookRate != null && <p className="text-xs text-gray-500 mt-1">{c.textbookRate}% textbook</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Day-of-Week Matrix (Phase 5) ─────────────────────────────────────── */}
+      {data.dayOfWeekMatrix?.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <SectionHeading>Day-of-Week Performance</SectionHeading>
+          <div className="grid grid-cols-5 gap-2">
+            {data.dayOfWeekMatrix.map(d => (
+              <div key={d.day} className="bg-gray-800 rounded-lg p-3 text-center">
+                <p className="text-xs text-gray-500 mb-1">{d.day}</p>
+                <p className="text-lg font-bold text-gray-100">{d.textbookRate}%</p>
+                <p className="text-xs text-gray-500">{d.count} setups</p>
+                <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${(d.count / maxDowCount) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Direction Matrix (Phase 5) ───────────────────────────────────────── */}
+      {data.directionMatrix?.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <SectionHeading>Market Direction Performance</SectionHeading>
+          <div className="grid grid-cols-3 gap-3">
+            {data.directionMatrix.map(d => (
+              <div key={d.direction} className={`rounded-xl p-4 text-center border ${d.direction === 'Bullish' ? 'border-emerald-800 bg-emerald-900/10' : d.direction === 'Bearish' ? 'border-rose-800 bg-rose-900/10' : 'border-yellow-800 bg-yellow-900/10'}`}>
+                <p className={`text-xs font-medium mb-1 ${d.direction === 'Bullish' ? 'text-emerald-400' : d.direction === 'Bearish' ? 'text-rose-400' : 'text-yellow-400'}`}>{d.direction}</p>
+                <p className="text-2xl font-bold text-gray-100">{d.textbookRate}%</p>
+                <p className="text-xs text-gray-500 mt-1">{d.count} setups</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Top confluence combinations ──────────────────────────────────────── */}
       {data.topCombos?.length > 0 && (

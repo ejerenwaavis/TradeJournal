@@ -256,6 +256,8 @@ const BLANK_SETUP = {
   pdArray: '', mssDirection: '', mssTime: '', engineeredLiq: false,
   discoveries: [], events: [],
   opportunities: [{ ...BLANK_OPPORTUNITY }],
+  clarityScore: null,
+  date: '', direction: '', sweepType2: '', sweepStyle: '', maxPts: '',
 };
 
 function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel }) {
@@ -279,9 +281,31 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
               : [{ name: 'Default', observations: [{ time: '', note: '' }] }],
           };
         });
-        return { text: rObj.text ?? '', subs, isMasterRule: true, checked: false, scenarios: defaultScenarios };
+        // Initialize branch structure from master rule
+        const branchType   = rObj.branchType   || 'none';
+        const branchLabels = rObj.branchLabels  || [];
+        const branches = branchType === 'none' ? [] :
+          branchType === 'single' ? [{ label: branchLabels[0] || 'Branch A', fired: false, timestamp: '', note: '' }] :
+          [
+            { label: branchLabels[0] || 'Branch A', fired: false, timestamp: '', note: '' },
+            { label: branchLabels[1] || 'Branch B', fired: false, timestamp: '', note: '' },
+          ];
+        return {
+          text: rObj.text ?? '',
+          subs,
+          isMasterRule: true,
+          checked: false,
+          scenarios: defaultScenarios,
+          ruleId: rObj.ruleId || null,
+          ruleType: rObj.ruleType || 'conditional',
+          macroTime: rObj.macroTime || null,
+          branchType,
+          branchLabels,
+          branches,
+          neitherFired: false,
+        };
       })
-    : [{ text: '', subs: [], isMasterRule: false, checked: false, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }] }];
+    : [{ text: '', subs: [], isMasterRule: false, checked: false, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }], branchType: 'none', branchLabels: [], branches: [], neitherFired: false }];
 
   // Migrate legacy per-trade fields into opportunities[0] for older setups
   const migrateOpps = (s) => {
@@ -311,7 +335,20 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                 : [{ name: 'Default', observations: [{ time: '', note: '' }] }],
             };
           });
-          return { text: r.text ?? '', subs, isMasterRule: r.isMasterRule ?? false, checked: r.checked ?? false, scenarios };
+          return {
+            text: r.text ?? '',
+            subs,
+            isMasterRule: r.isMasterRule ?? false,
+            checked: r.checked ?? false,
+            scenarios,
+            ruleId: r.ruleId || null,
+            ruleType: r.ruleType || 'conditional',
+            macroTime: r.macroTime || null,
+            branchType: r.branchType || 'none',
+            branchLabels: r.branchLabels || [],
+            branches: r.branches || [],
+            neitherFired: r.neitherFired || false,
+          };
         })
       : baseRules),
     chartImages: initial.chartImages?.length
@@ -332,6 +369,12 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
     engineeredLiq: initial.engineeredLiq ?? false,
     session: initial.session ?? '',
     opportunities: migrateOpps(initial),
+    clarityScore: initial.clarityScore ?? null,
+    date: initial.date ? new Date(initial.date).toISOString().split('T')[0] : '',
+    direction: initial.direction ?? '',
+    sweepType2: initial.sweepType2 ?? '',
+    sweepStyle: initial.sweepStyle ?? '',
+    maxPts: initial.maxPts ?? '',
   } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [], newsEntries: [] });
   const [activeOpp, setActiveOpp] = useState(0);
   const [activeScenarios, setActiveScenarios] = useState({}); // { ruleIndex: scenarioIndex }
@@ -342,6 +385,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
   const [obsUploadingKey, setObsUploadingKey] = useState(null);
   const [obsLinkKey, setObsLinkKey] = useState(null); // which obs has link input open
   const [obsLinkUrls, setObsLinkUrls] = useState({}); // { '${ri}-${oi}': url }
+  // Live/Review Mode: default Live for new entries, Review for editing existing
+  const [liveMode, setLiveMode] = useState(!initial);
   const fileRef = useRef();
   const obsFileRefs = useRef({});
   const discRefs = useRef({});
@@ -628,6 +673,13 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         targetLevel: first.targetLevel, stalledAt: first.stalledAt, reachedTarget: first.reachedTarget,
         entryLevel: first.entryLevel, stopLevel: first.stopLevel,
         rMultiple: first.rMultiple, mfe: first.mfe, mae: first.mae,
+        // Phase 3 / 5 fields
+        clarityScore: form.clarityScore || null,
+        date: form.date || null,
+        direction: form.direction || '',
+        sweepType2: form.sweepType2 || '',
+        sweepStyle: form.sweepStyle || '',
+        maxPts: form.maxPts !== '' ? Number(form.maxPts) : undefined,
       };
       let result;
       if (initial?._id) {
@@ -643,9 +695,20 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
 
   return (
     <div className="bg-gray-900 border border-indigo-800 rounded-xl p-5 space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm font-semibold text-indigo-300">{initial ? 'Edit Setup' : 'New Setup'}</p>
-        <button onClick={onCancel} className="text-xs text-gray-500 hover:text-gray-300">Cancel</button>
+        <div className="flex items-center gap-2">
+          {/* Live / Review Mode toggle */}
+          <button
+            type="button"
+            onClick={() => setLiveMode(v => !v)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${liveMode ? 'bg-amber-700 border-amber-600 text-white' : 'bg-indigo-700 border-indigo-600 text-white'}`}
+            title={liveMode ? 'Switch to Review Mode — reveals branch notes, clarity score, full observations' : 'Switch to Live Mode — shows only checkboxes, timestamps, screenshots'}
+          >
+            {liveMode ? '⚡ Live Mode' : '📝 Review Mode'}
+          </button>
+          <button onClick={onCancel} className="text-xs text-gray-500 hover:text-gray-300">Cancel</button>
+        </div>
       </div>
 
       {/* Title */}
@@ -948,6 +1011,99 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                         + Add observation
                       </button>
                     </div>
+
+                    {/* Branch Section — shown in Review Mode only */}
+                    {!liveMode && rule.branchType && rule.branchType !== 'none' && (
+                      <div className="ml-7 mt-3 border-t border-gray-700/40 pt-3">
+                        <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Branch Outcomes</p>
+
+                        {/* Single branch */}
+                        {rule.branchType === 'single' && (
+                          <div className="space-y-2">
+                            {(rule.branches || []).slice(0, 1).map((branch, bi) => (
+                              <div key={bi} className={`rounded-lg border p-3 ${branch.fired ? 'border-emerald-700 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'}`}>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newBranches = [...(rule.branches || [])];
+                                      newBranches[bi] = { ...newBranches[bi], fired: !newBranches[bi].fired };
+                                      updateRule(i, { branches: newBranches });
+                                    }}
+                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${branch.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-emerald-600'}`}
+                                  >
+                                    {branch.fired ? '✓ Fired' : '○ Not Fired'}
+                                  </button>
+                                  <span className="text-xs font-medium text-gray-300">{branch.label || 'Branch A'}</span>
+                                  {branch.fired && (
+                                    <input
+                                      type="time"
+                                      value={branch.timestamp || ''}
+                                      onChange={(e) => { const nb = [...(rule.branches||[])]; nb[bi] = {...nb[bi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
+                                      className="ml-auto bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                  )}
+                                </div>
+                                <textarea
+                                  value={branch.note || ''}
+                                  onChange={(e) => { const nb = [...(rule.branches||[])]; nb[bi] = {...nb[bi], note: e.target.value}; updateRule(i, { branches: nb }); }}
+                                  placeholder={branch.fired ? 'Describe what happened…' : 'What was being watched for and why it did not trigger…'}
+                                  rows={2}
+                                  className={`${inputCls} text-xs`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Fork branches (A/B) */}
+                        {rule.branchType === 'fork' && (() => {
+                          const branchA = (rule.branches || [])[0] || { label: 'Branch A', fired: false, timestamp: '', note: '' };
+                          const branchB = (rule.branches || [])[1] || { label: 'Branch B', fired: false, timestamp: '', note: '' };
+                          const neither = rule.neitherFired || false;
+                          const setFork = (choice) => {
+                            const nb = [
+                              { ...branchA, fired: choice === 'A' },
+                              { ...branchB, fired: choice === 'B' },
+                            ];
+                            updateRule(i, { branches: nb, neitherFired: choice === 'neither' });
+                          };
+                          return (
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setFork('A')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${branchA.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{branchA.label || 'Branch A'} fired</button>
+                                <button type="button" onClick={() => setFork('B')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${branchB.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{branchB.label || 'Branch B'} fired</button>
+                                <button type="button" onClick={() => setFork('neither')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${neither ? 'bg-amber-700 border-amber-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-amber-600'}`}>Neither</button>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {[branchA, branchB].map((branch, bi) => (
+                                  <div key={bi} className={`rounded-lg border p-2.5 ${branch.fired ? 'border-emerald-700 bg-emerald-950/20' : neither ? 'border-gray-700 opacity-60 bg-gray-800/20' : 'border-gray-700 bg-gray-800/40'}`}>
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-xs font-medium text-gray-300">{branch.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
+                                      {branch.fired && (
+                                        <input
+                                          type="time"
+                                          value={branch.timestamp || ''}
+                                          onChange={(e) => { const nb = [...(rule.branches||[{},{  }])]; nb[bi] = {...nb[bi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
+                                          className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
+                                        />
+                                      )}
+                                    </div>
+                                    <textarea
+                                      value={branch.note || ''}
+                                      onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[bi] = {...nb[bi], note: e.target.value}; updateRule(i, { branches: nb }); }}
+                                      placeholder={branch.fired ? 'What happened…' : 'What was watched for / why it did not trigger…'}
+                                      rows={2}
+                                      className={`${inputCls} text-xs`}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                   );
                 })}
@@ -1026,6 +1182,9 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           </div>
         </div>
       </div>
+
+      {/* ══ Review Mode only: everything below hidden in Live Mode ═══════ */}
+      {!liveMode && (<>
 
       {/* Discoveries — variable observations unique to this setup */}
       <div>
@@ -1392,6 +1551,71 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="Additional notes…" className={`${inputCls} resize-none`} />
       </div>
 
+      {/* Analytics fields */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
+          <input type="date" value={form.date || ''} onChange={set('date')} className={selectCls} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Direction</label>
+          <select value={form.direction || ''} onChange={set('direction')} className={selectCls}>
+            <option value="">—</option>
+            <option value="Bullish">Bullish</option>
+            <option value="Bearish">Bearish</option>
+            <option value="Neutral">Neutral</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Sweep Type</label>
+          <select value={form.sweepType2 || ''} onChange={set('sweepType2')} className={selectCls}>
+            <option value="">—</option>
+            <option value="Buyside">Buyside</option>
+            <option value="Sellside">Sellside</option>
+            <option value="Both">Both</option>
+            <option value="None">None</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Sweep Style</label>
+          <select value={form.sweepStyle || ''} onChange={set('sweepStyle')} className={selectCls}>
+            <option value="">—</option>
+            <option value="Intent">Intent (bodies)</option>
+            <option value="Fakeout">Fakeout (wicks)</option>
+            <option value="Both">Both</option>
+            <option value="None">None</option>
+          </select>
+        </div>
+      </div>
+
+      </>)}
+      {/* ══ End Review Mode only block ════════════════════════════════════ */}
+
+      {/* Clarity Score — Review Mode only */}
+      {!liveMode && (
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-2">Session Clarity Score</label>
+          <p className="text-xs text-gray-600 mb-2">How cleanly did price deliver the framework?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { val: 1, label: 'Choppy (1)', desc: 'Erratic, unclear', color: form.clarityScore === 1 ? 'bg-gray-700 border-gray-500 text-gray-200' : 'bg-gray-900 border-gray-700 text-gray-500 hover:border-gray-500' },
+              { val: 2, label: 'Readable (2)', desc: 'Some noise', color: form.clarityScore === 2 ? 'bg-amber-800 border-amber-600 text-white' : 'bg-gray-900 border-gray-700 text-gray-500 hover:border-amber-600' },
+              { val: 3, label: 'Textbook (3)', desc: 'Crystal clear', color: form.clarityScore === 3 ? 'bg-emerald-800 border-emerald-600 text-white' : 'bg-gray-900 border-gray-700 text-gray-500 hover:border-emerald-600' },
+            ].map(({ val, label, desc, color }) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setForm(f => ({ ...f, clarityScore: f.clarityScore === val ? null : val }))}
+                className={`border rounded-xl py-3 px-2 text-center transition-colors ${color}`}
+              >
+                <p className="text-sm font-bold">{label}</p>
+                <p className="text-xs opacity-70 mt-0.5">{desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg">
           {saving ? 'Saving…' : initial ? 'Save Changes' : 'Add Setup'}
@@ -1408,6 +1632,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
 function SetupCard({ setup, onEdit, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [lightboxIdx, setLightboxIdx] = useState(null);
+  const [shareState, setShareState] = useState(setup.isPublic ? 'shared' : 'none'); // none | shared | copied
+  const [shareToken, setShareToken] = useState(setup.shareToken || null);
 
   // Normalise images — prefer chartImages, fall back to legacy chartImageUrl
   const images = setup.chartImages?.length
@@ -1432,7 +1658,37 @@ function SetupCard({ setup, onEdit, onDelete }) {
 
   const biasColor = { Bullish: 'text-emerald-400', Bearish: 'text-rose-400', Neutral: 'text-yellow-400' }[first.bias] || 'text-gray-400';
 
+  async function handleShare() {
+    try {
+      const res = await api.post(`/study/setups/${setup._id}/share`);
+      const token = res.data.shareToken;
+      setShareToken(token);
+      setShareState('shared');
+      const url = `${window.location.origin}/share/${token}`;
+      await navigator.clipboard.writeText(url).catch(() => {});
+      setShareState('copied');
+      setTimeout(() => setShareState('shared'), 2000);
+    } catch (err) {
+      console.error('Share failed:', err);
+    }
+  }
 
+  async function handleUnshare() {
+    try {
+      await api.post(`/study/setups/${setup._id}/unshare`);
+      setShareState('none');
+      setShareToken(null);
+    } catch (err) {
+      console.error('Unshare failed:', err);
+    }
+  }
+
+  async function handleCopyLink() {
+    const url = `${window.location.origin}/share/${shareToken}`;
+    await navigator.clipboard.writeText(url).catch(() => {});
+    setShareState('copied');
+    setTimeout(() => setShareState('shared'), 2000);
+  }
 
   return (
     <>
@@ -1482,9 +1738,33 @@ function SetupCard({ setup, onEdit, onDelete }) {
                   {first.timeOfTrade && <span className="text-xs text-gray-500">{first.timeOfTrade}</span>}
                   {first.maxRun != null && first.maxRun !== '' && <span className="text-xs text-gray-500">Max: {first.maxRun} pts</span>}
                   {opps.length > 1 && <span className="text-xs text-indigo-400 font-medium">{opps.length} opportunities</span>}
+                  {/* Clarity Score badge */}
+                  {setup.clarityScore != null && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${setup.clarityScore === 3 ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700' : setup.clarityScore === 2 ? 'bg-amber-900/60 text-amber-300 border border-amber-700' : 'bg-gray-700 text-gray-400 border border-gray-600'}`}>
+                      C{setup.clarityScore}
+                    </span>
+                  )}
+                  {/* Completion rate badge */}
+                  {setup.completionRate != null && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 border border-gray-700 text-gray-400">
+                      {setup.completionRate}%
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-1.5 shrink-0">
+                {shareState === 'none' && (
+                  <button title="Share setup" onClick={handleShare} className="text-gray-500 hover:text-indigo-400 transition-colors"><LinkIcon className="w-4 h-4" /></button>
+                )}
+                {shareState === 'shared' && (
+                  <>
+                    <button title="Copy share link" onClick={handleCopyLink} className="text-indigo-400 hover:text-indigo-300 transition-colors"><LinkIcon className="w-4 h-4" /></button>
+                    <button title="Remove share link" onClick={handleUnshare} className="text-gray-500 hover:text-rose-400 transition-colors text-xs px-1">unshare</button>
+                  </>
+                )}
+                {shareState === 'copied' && (
+                  <span className="text-xs text-emerald-400 self-center">Copied!</span>
+                )}
                 <button onClick={() => onEdit(setup)} className="text-gray-500 hover:text-indigo-400 transition-colors"><PencilIcon className="w-4 h-4" /></button>
                 <button onClick={() => onDelete(setup._id)} className="text-gray-500 hover:text-rose-400 transition-colors"><TrashIcon className="w-4 h-4" /></button>
               </div>
@@ -1612,6 +1892,37 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                   );
                                   return null;
                                 })()}
+
+                                {/* Branch outcomes — read-only */}
+                                {rObj.branchType && rObj.branchType !== 'none' && (rObj.branches?.length > 0 || rObj.neitherFired) && (
+                                  <div className="mt-2 border-t border-gray-700/40 pt-2">
+                                    {rObj.branchType === 'single' && (rObj.branches || []).slice(0, 1).map((b, bi) => (
+                                      <div key={bi} className="flex items-start gap-2">
+                                        <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'text-emerald-400' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
+                                        <div>
+                                          <span className="text-xs text-gray-400">{b.label || 'Branch A'}</span>
+                                          {b.fired && b.timestamp && <span className="text-xs text-gray-500 ml-1.5">@ {b.timestamp}</span>}
+                                          {b.note && <p className={`text-xs ${b.fired ? 'text-gray-300' : 'text-gray-600'} mt-0.5`}>{b.note}</p>}
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {rObj.branchType === 'fork' && (
+                                      <div className="space-y-1">
+                                        {rObj.neitherFired && <p className="text-xs text-amber-500 font-medium">Neither branch fired</p>}
+                                        {(rObj.branches || []).map((b, bi) => (
+                                          <div key={bi} className={`flex items-start gap-2 ${!b.fired && !rObj.neitherFired ? 'opacity-50' : ''}`}>
+                                            <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'text-emerald-400' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
+                                            <div>
+                                              <span className={`text-xs font-medium ${b.fired ? 'text-emerald-300' : 'text-gray-500'}`}>{b.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
+                                              {b.fired && b.timestamp && <span className="text-xs text-gray-500 ml-1.5">@ {b.timestamp}</span>}
+                                              {b.note && <p className={`text-xs ${b.fired ? 'text-gray-300' : 'text-gray-600'} mt-0.5`}>{b.note}</p>}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </li>
@@ -1758,6 +2069,12 @@ function TopicModal({ initial, onSave, onClose }) {
             text: rObj.text ?? '',
             subs: (rObj.subs || []).map(s => typeof s === 'string' ? { text: s, scenarios: [] } : { text: s.text ?? '', scenarios: s.scenarios ?? [] }),
             scenarios: rObj.scenarios ?? [],
+            ruleId: rObj.ruleId ?? null,
+            isFromLibrary: rObj.isFromLibrary ?? false,
+            ruleType: rObj.ruleType ?? 'conditional',
+            macroTime: rObj.macroTime ?? null,
+            branchType: rObj.branchType ?? 'none',
+            branchLabels: rObj.branchLabels ?? [],
           };
         })
       : [],
@@ -1773,6 +2090,44 @@ function TopicModal({ initial, onSave, onClose }) {
   const [dragOverMaster, setDragOverMaster] = useState(null);
   const dragMasterFrom = useRef(null);
   const dragMasterOver = useRef(null);
+  // Library import state
+  const [libraryRules, setLibraryRules] = useState([]);
+  const [showLibraryPicker, setShowLibraryPicker] = useState(false);
+  const [libSearch, setLibSearch] = useState('');
+
+  useEffect(() => {
+    api.get('/rules/library').then(({ data }) => setLibraryRules(data.rules || [])).catch(() => {});
+  }, []);
+
+  const importedRuleIds = new Set((form.masterRules || []).map(r => r.ruleId).filter(Boolean));
+
+  const handleImportLibraryRule = (libRule) => {
+    if (importedRuleIds.has(libRule.ruleId)) {
+      toast.error('This rule is already in the master list');
+      return;
+    }
+    const newEntry = {
+      text: libRule.title,
+      subs: [],
+      scenarios: [{ name: 'Default' }],
+      ruleId: libRule.ruleId,
+      isFromLibrary: true,
+      ruleType: libRule.ruleType,
+      macroTime: libRule.macroTime || null,
+      branchType: libRule.defaultBranchType || 'none',
+      branchLabels: [...(libRule.defaultBranchLabels || [])],
+    };
+    setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), newEntry] }));
+    setShowLibraryPicker(false);
+    setLibSearch('');
+    toast.success(`"${libRule.title}" imported`);
+  };
+
+  const filteredLib = libraryRules.filter(r => {
+    if (!libSearch) return true;
+    const q = libSearch.toLowerCase();
+    return r.title.toLowerCase().includes(q) || r.ruleId.includes(q) || r.tags?.some(t => t.includes(q));
+  });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const setMasterRule = (i, v) => setForm(f => {
@@ -1835,7 +2190,17 @@ function TopicModal({ initial, onSave, onClose }) {
         description: form.description,
         color: form.color,
         tags: typeof form.tags === 'string' ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : form.tags,
-        masterRules: (form.masterRules || []).filter(r => r.text?.trim()),
+        masterRules: (form.masterRules || []).filter(r => r.text?.trim()).map(r => ({
+          text: r.text,
+          subs: r.subs || [],
+          scenarios: r.scenarios || [],
+          ruleId: r.ruleId || null,
+          isFromLibrary: r.isFromLibrary || false,
+          ruleType: r.ruleType || 'conditional',
+          macroTime: r.macroTime || null,
+          branchType: r.branchType || 'none',
+          branchLabels: r.branchLabels || [],
+        })),
         macroWindows: form.macroWindows || [],
         studyParameters: form.studyParameters,
       };
@@ -1900,6 +2265,9 @@ function TopicModal({ initial, onSave, onClose }) {
                 >
                   <Bars3Icon className="w-4 h-4 text-gray-600 cursor-grab shrink-0" />
                   <span className="text-xs text-gray-600 w-5 text-right shrink-0">{i + 1}.</span>
+                  {rule.isFromLibrary && (
+                    <span className="text-[9px] bg-teal-900/60 border border-teal-700 text-teal-400 rounded-full px-1.5 shrink-0 font-mono" title={`Library: ${rule.ruleId}`}>lib</span>
+                  )}
                   <input
                     type="text"
                     value={rule.text}
@@ -1979,10 +2347,166 @@ function TopicModal({ initial, onSave, onClose }) {
                 <div className="ml-7 mt-1">
                   <button type="button" onClick={() => addScenario(i)} className="text-xs text-amber-500 hover:text-amber-400 transition-colors">+ Add scenario</button>
                 </div>
+
+                {/* Rule type / branch / macro settings */}
+                <div className="ml-7 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {/* Rule Type */}
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-0.5">Rule Type</label>
+                    <select
+                      value={rule.ruleType || 'conditional'}
+                      onChange={(e) => {
+                        const mr = [...(form.masterRules || [])];
+                        mr[i] = { ...mr[i], ruleType: e.target.value, macroTime: e.target.value === 'conditional' ? null : (mr[i].macroTime || '') };
+                        setForm(f => ({ ...f, masterRules: mr }));
+                      }}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="conditional">Conditional</option>
+                      <option value="macro">Macro</option>
+                    </select>
+                  </div>
+                  {/* Macro Time (only if macro) */}
+                  {(rule.ruleType === 'macro') && (
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Macro Time</label>
+                      <input
+                        type="text"
+                        value={rule.macroTime || ''}
+                        onChange={(e) => {
+                          const mr = [...(form.masterRules || [])];
+                          mr[i] = { ...mr[i], macroTime: e.target.value };
+                          setForm(f => ({ ...f, masterRules: mr }));
+                        }}
+                        placeholder="e.g. 10:30"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-amber-500 placeholder-gray-600"
+                      />
+                    </div>
+                  )}
+                  {/* Branch Type */}
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-0.5">Branch Type</label>
+                    <select
+                      value={rule.branchType || 'none'}
+                      onChange={(e) => {
+                        const mr = [...(form.masterRules || [])];
+                        const bt = e.target.value;
+                        const oldLabels = mr[i].branchLabels || [];
+                        let labels = oldLabels;
+                        if (bt === 'none') labels = [];
+                        else if (bt === 'single' && oldLabels.length === 0) labels = ['Confirmed'];
+                        else if (bt === 'fork' && oldLabels.length < 2) labels = [oldLabels[0] || 'Branch A', oldLabels[1] || 'Branch B'];
+                        mr[i] = { ...mr[i], branchType: bt, branchLabels: labels };
+                        setForm(f => ({ ...f, masterRules: mr }));
+                      }}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    >
+                      <option value="none">None</option>
+                      <option value="single">Single</option>
+                      <option value="fork">Fork (A/B)</option>
+                    </select>
+                  </div>
+                  {/* Branch Labels (conditional on branchType) */}
+                  {rule.branchType === 'single' && (
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Branch Label</label>
+                      <input
+                        type="text"
+                        value={(rule.branchLabels || [])[0] || ''}
+                        onChange={(e) => {
+                          const mr = [...(form.masterRules || [])];
+                          mr[i] = { ...mr[i], branchLabels: [e.target.value] };
+                          setForm(f => ({ ...f, masterRules: mr }));
+                        }}
+                        placeholder="e.g. Confirmed"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder-gray-600"
+                      />
+                    </div>
+                  )}
+                  {rule.branchType === 'fork' && (
+                    <>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Label A</label>
+                        <input
+                          type="text"
+                          value={(rule.branchLabels || [])[0] || ''}
+                          onChange={(e) => {
+                            const mr = [...(form.masterRules || [])];
+                            const old = mr[i].branchLabels || ['', ''];
+                            mr[i] = { ...mr[i], branchLabels: [e.target.value, old[1] || ''] };
+                            setForm(f => ({ ...f, masterRules: mr }));
+                          }}
+                          placeholder="e.g. Reversal"
+                          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder-gray-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-gray-500 mb-0.5">Label B</label>
+                        <input
+                          type="text"
+                          value={(rule.branchLabels || [])[1] || ''}
+                          onChange={(e) => {
+                            const mr = [...(form.masterRules || [])];
+                            const old = mr[i].branchLabels || ['', ''];
+                            mr[i] = { ...mr[i], branchLabels: [old[0] || '', e.target.value] };
+                            setForm(f => ({ ...f, masterRules: mr }));
+                          }}
+                          placeholder="e.g. Continuation"
+                          className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder-gray-600"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
             <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '', subs: [], scenarios: [] }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
+            {libraryRules.length > 0 && (
+              <button type="button" onClick={() => setShowLibraryPicker(v => !v)} className="text-xs text-teal-400 hover:underline ml-4">{showLibraryPicker ? '— Close library' : '+ Import from Library'}</button>
+            )}
           </div>
+
+          {/* Library Picker */}
+          {showLibraryPicker && (
+            <div className="mt-3 bg-gray-950 border border-gray-700 rounded-xl p-4 space-y-3">
+              <p className="text-xs font-semibold text-teal-300">Rule Library — click to import</p>
+              {libraryRules.length > 4 && (
+                <input
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-teal-500 placeholder-gray-500"
+                  placeholder="Search…"
+                  value={libSearch}
+                  onChange={e => setLibSearch(e.target.value)}
+                />
+              )}
+              <div className="space-y-1.5 max-h-52 overflow-y-auto">
+                {filteredLib.map(r => {
+                  const alreadyIn = importedRuleIds.has(r.ruleId);
+                  return (
+                    <button
+                      key={r.ruleId}
+                      type="button"
+                      disabled={alreadyIn}
+                      onClick={() => handleImportLibraryRule(r)}
+                      className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                        alreadyIn
+                          ? 'border-gray-800 bg-gray-900 opacity-40 cursor-not-allowed'
+                          : 'border-gray-700 bg-gray-800 hover:border-teal-600 hover:bg-gray-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-200">{r.title}</span>
+                        <span className="text-[10px] text-gray-500 font-mono">{r.ruleId}</span>
+                        {r.ruleType === 'macro' && <span className="text-[10px] bg-amber-900/60 border border-amber-700 text-amber-300 rounded-full px-1.5">macro {r.macroTime}</span>}
+                        {r.defaultBranchType !== 'none' && <span className="text-[10px] bg-teal-900/60 border border-teal-700 text-teal-300 rounded-full px-1.5">{r.defaultBranchType}</span>}
+                        {alreadyIn && <span className="text-[10px] text-gray-500 ml-auto">already added</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+                {filteredLib.length === 0 && <p className="text-xs text-gray-500 text-center py-2">No rules match your search</p>}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Macro Windows */}

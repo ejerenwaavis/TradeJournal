@@ -22,6 +22,8 @@ import FlashcardsPage from './pages/FlashcardsPage';
 import StudyCompanionPage from './pages/StudyCompanionPage';
 import StudyAnalyticsPage from './pages/StudyAnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
+import RuleLibraryPage from './pages/RuleLibraryPage';
+import SharedSetupPage from './pages/SharedSetupPage';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -47,6 +49,7 @@ export default function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-use" element={<TermsOfUsePage />} />
+          <Route path="/share/:token" element={<SharedSetupPage />} />
           <Route
             path="/*"
             element={
@@ -64,6 +67,7 @@ export default function App() {
                     <Route path="/flashcards" element={<FlashcardsPage />} />
                     <Route path="/study" element={<StudyCompanionPage />} />
                     <Route path="/study/analytics" element={<StudyAnalyticsPage />} />
+                    <Route path="/rules" element={<RuleLibraryPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Routes>

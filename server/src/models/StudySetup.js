@@ -91,8 +91,35 @@ const studySetupSchema = new mongoose.Schema(
 
     // Multi-opportunity — multiple trade entries per study sample
     opportunities: [{ type: mongoose.Schema.Types.Mixed }],
+
+    // Plan Phase 3 — Session Scoring
+    clarityScore:    { type: Number, enum: [1, 2, 3], default: null },
+    completionRate:  { type: Number, default: null },
+    firedRulesCount: { type: Number, default: null },
+    totalRulesCount: { type: Number, default: null },
+
+    // Plan Phase 4 — Public sharing
+    isPublic:   { type: Boolean, default: false },
+    shareToken: { type: String, default: null, sparse: true },
+
+    // Plan Phase 5 — Analytics fields
+    date:       { type: Date },
+    dayOfWeek:  { type: String, enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', ''], default: '' },
+    direction:  { type: String, enum: ['Bullish', 'Bearish', 'Neutral', ''], default: '' },
+    sweepType2: { type: String, enum: ['Buyside', 'Sellside', 'Both', 'None', ''], default: '' },
+    sweepStyle: { type: String, enum: ['Intent', 'Fakeout', 'Both', 'None', ''], default: '' },
+    maxPts:     { type: Number },
   },
   { timestamps: true }
 );
+
+// Auto-derive dayOfWeek from date on every save
+studySetupSchema.pre('save', function (next) {
+  if (this.date) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    this.dayOfWeek = days[new Date(this.date).getDay()] || '';
+  }
+  next();
+});
 
 module.exports = mongoose.model('StudySetup', studySetupSchema);
