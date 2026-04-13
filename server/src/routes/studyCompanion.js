@@ -100,7 +100,7 @@ router.post('/topics/:id/promote-discovery', auth, async (req, res) => {
     const trimmed = text.trim();
     const existingTexts = (topic.masterRules || []).map(r => (typeof r === 'string' ? r : r.text));
     if (!existingTexts.includes(trimmed)) {
-      topic.masterRules = [...(topic.masterRules || []), { text: trimmed, subs: [] }];
+      topic.masterRules = [...(topic.masterRules || []), { text: trimmed }];
       await topic.save();
     }
 
@@ -146,8 +146,6 @@ router.post('/topics/:id/rules/import', auth, async (req, res) => {
 
     const newEntry = {
       text: libRule.title,
-      subs: [],
-      scenarios: [{ name: 'Default', observations: [] }],
       ruleId: libRule.ruleId,
       isFromLibrary: true,
       ruleType: libRule.ruleType,

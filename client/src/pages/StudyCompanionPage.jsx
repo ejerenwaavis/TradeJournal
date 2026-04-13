@@ -2064,11 +2064,9 @@ function TopicModal({ initial, onSave, onClose }) {
     color:       initial?.color ?? '#6366f1',
     masterRules: initial?.masterRules?.length
       ? initial.masterRules.map(r => {
-          const rObj = typeof r === 'string' ? { text: r, subs: [], scenarios: [] } : r;
+          const rObj = typeof r === 'string' ? { text: r } : r;
           return {
             text: rObj.text ?? '',
-            subs: (rObj.subs || []).map(s => typeof s === 'string' ? { text: s, scenarios: [] } : { text: s.text ?? '', scenarios: s.scenarios ?? [] }),
-            scenarios: rObj.scenarios ?? [],
             ruleId: rObj.ruleId ?? null,
             isFromLibrary: rObj.isFromLibrary ?? false,
             ruleType: rObj.ruleType ?? 'conditional',
@@ -2108,8 +2106,6 @@ function TopicModal({ initial, onSave, onClose }) {
     }
     const newEntry = {
       text: libRule.title,
-      subs: [],
-      scenarios: [{ name: 'Default' }],
       ruleId: libRule.ruleId,
       isFromLibrary: true,
       ruleType: libRule.ruleType,
@@ -2135,51 +2131,11 @@ function TopicModal({ initial, onSave, onClose }) {
   });
   const addMasterRule = (afterIdx) => setForm(f => {
     const r = [...f.masterRules];
-    r.splice(afterIdx + 1, 0, { text: '', subs: [] });
+    r.splice(afterIdx + 1, 0, { text: '' });
     return { ...f, masterRules: r };
   });
   const removeMasterRule = (i) => setForm(f => ({ ...f, masterRules: f.masterRules.filter((_, idx) => idx !== i) }));
   const moveMasterRule = (from, to) => setForm(f => { const r = [...f.masterRules]; const [m] = r.splice(from, 1); r.splice(to, 0, m); return { ...f, masterRules: r }; });
-  const setMasterSub = (ri, si, v) => setForm(f => {
-    const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
-    const existing = subs[si];
-    subs[si] = { ...(typeof existing === 'string' ? { text: existing, scenarios: [] } : existing), text: v };
-    r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
-  });
-  const addMasterSub = (ri) => setForm(f => {
-    const r = [...f.masterRules]; r[ri] = { ...r[ri], subs: [...(r[ri].subs || []), { text: '', scenarios: [] }] }; return { ...f, masterRules: r };
-  });
-  const removeMasterSub = (ri, si) => setForm(f => {
-    const r = [...f.masterRules]; r[ri] = { ...r[ri], subs: (r[ri].subs || []).filter((_, i) => i !== si) }; return { ...f, masterRules: r };
-  });
-  const addSubScenario = (ri, si) => setForm(f => {
-    const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
-    const s = subs[si]; const subObj = typeof s === 'string' ? { text: s, scenarios: [] } : { ...s };
-    subObj.scenarios = [...(subObj.scenarios || []), { name: '' }];
-    subs[si] = subObj; r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
-  });
-  const setSubScenarioName = (ri, si, sci, v) => setForm(f => {
-    const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
-    const s = subs[si]; const subObj = { ...(typeof s === 'string' ? { text: s, scenarios: [] } : s) };
-    const sc = [...(subObj.scenarios || [])]; sc[sci] = { ...sc[sci], name: v };
-    subs[si] = { ...subObj, scenarios: sc }; r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
-  });
-  const removeSubScenario = (ri, si, sci) => setForm(f => {
-    const r = [...f.masterRules]; const subs = [...(r[ri].subs || [])];
-    const s = subs[si]; const subObj = { ...(typeof s === 'string' ? { text: s, scenarios: [] } : s) };
-    subObj.scenarios = (subObj.scenarios || []).filter((_, i) => i !== sci);
-    subs[si] = subObj; r[ri] = { ...r[ri], subs }; return { ...f, masterRules: r };
-  });
-
-  const addScenario = (ri) => setForm(f => {
-    const r = [...f.masterRules]; r[ri] = { ...r[ri], scenarios: [...(r[ri].scenarios || []), { name: '' }] }; return { ...f, masterRules: r };
-  });
-  const setScenarioName = (ri, si, v) => setForm(f => {
-    const r = [...f.masterRules]; const sc = [...(r[ri].scenarios || [])]; sc[si] = { ...sc[si], name: v }; r[ri] = { ...r[ri], scenarios: sc }; return { ...f, masterRules: r };
-  });
-  const removeScenario = (ri, si) => setForm(f => {
-    const r = [...f.masterRules]; r[ri] = { ...r[ri], scenarios: (r[ri].scenarios || []).filter((_, i) => i !== si) }; return { ...f, masterRules: r };
-  });
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
@@ -2192,8 +2148,6 @@ function TopicModal({ initial, onSave, onClose }) {
         tags: typeof form.tags === 'string' ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : form.tags,
         masterRules: (form.masterRules || []).filter(r => r.text?.trim()).map(r => ({
           text: r.text,
-          subs: r.subs || [],
-          scenarios: r.scenarios || [],
           ruleId: r.ruleId || null,
           isFromLibrary: r.isFromLibrary || false,
           ruleType: r.ruleType || 'conditional',
@@ -2247,9 +2201,9 @@ function TopicModal({ initial, onSave, onClose }) {
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Master Rules</label>
           <p className="text-xs text-gray-500 mb-2">Core conditions every setup in this topic must satisfy. Enter to add next rule, Backspace on empty to delete.</p>
-          <div className="space-y-1.5">
+          <div className="space-y-4">
             {(form.masterRules || []).map((rule, i) => (
-              <div key={i}>
+              <div key={i} className="bg-gray-800/40 border border-gray-700 rounded-lg p-3">
                 <div
                   className={`flex gap-2 items-center ${dragOverMaster === i ? 'border-t-2 border-indigo-500' : ''}`}
                   draggable
@@ -2276,78 +2230,13 @@ function TopicModal({ initial, onSave, onClose }) {
                     className={`${inputCls} flex-1`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') { e.preventDefault(); addMasterRule(i); }
-                      if (e.key === 'Backspace' && !rule.text && !rule.subs?.length) { e.preventDefault(); removeMasterRule(i); }
+                      if (e.key === 'Backspace' && !rule.text) { e.preventDefault(); removeMasterRule(i); }
                     }}
                   />
-                  <button type="button" onClick={() => addMasterSub(i)} className="text-gray-600 hover:text-indigo-400 shrink-0 transition-colors" title="Add sub-rule">
-                    <PlusIcon className="w-3.5 h-3.5" />
-                  </button>
                   <button type="button" onClick={() => removeMasterRule(i)} className="text-gray-600 hover:text-rose-400 shrink-0">
                     <TrashIcon className="w-4 h-4" />
                   </button>
                 </div>
-                {(rule.subs || []).map((sub, j) => {
-                  const subObj = typeof sub === 'string' ? { text: sub, scenarios: [] } : sub;
-                  return (
-                    <div key={j} className="ml-7 mt-1 space-y-0.5">
-                      <div className="flex gap-2 items-center">
-                        <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
-                        <input
-                          type="text"
-                          value={subObj.text}
-                          onChange={(e) => setMasterSub(i, j, e.target.value)}
-                          placeholder="Sub-rule or caveat…"
-                          className="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Backspace' && !subObj.text && !subObj.scenarios?.length) { e.preventDefault(); removeMasterSub(i, j); }
-                          }}
-                        />
-                        <button type="button" onClick={() => addSubScenario(i, j)} className="text-gray-600 hover:text-amber-400 shrink-0 transition-colors" title="Add outcome scenario">
-                          <PlusIcon className="w-3 h-3" />
-                        </button>
-                        <button type="button" onClick={() => removeMasterSub(i, j)} className="text-gray-600 hover:text-rose-400 shrink-0">
-                          <TrashIcon className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      {(subObj.scenarios || []).map((sc, sci) => (
-                        <div key={sci} className="flex gap-2 items-center ml-4">
-                          <span className="text-xs text-amber-500 shrink-0 select-none">⤷</span>
-                          <input
-                            type="text"
-                            value={sc.name}
-                            onChange={(e) => setSubScenarioName(i, j, sci, e.target.value)}
-                            placeholder={`e.g. If ${subObj.text || 'sub-rule'} ${sci === 0 ? 'holds' : 'fails'}…`}
-                            className="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                          />
-                          <button type="button" onClick={() => removeSubScenario(i, j, sci)} className="text-gray-600 hover:text-rose-400 shrink-0"><TrashIcon className="w-3 h-3" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-                {/* Scenarios per rule */}
-                {(rule.scenarios || []).length > 0 && (
-                  <div className="ml-7 mt-1.5 space-y-1">
-                    <p className="text-xs text-gray-600">Scenarios (expected outcomes):</p>
-                    {rule.scenarios.map((sc, si) => (
-                      <div key={si} className="flex gap-2 items-center">
-                        <span className="text-xs text-amber-500 shrink-0 select-none">⤷</span>
-                        <input
-                          type="text"
-                          value={sc.name}
-                          onChange={(e) => setScenarioName(i, si, e.target.value)}
-                          placeholder={`e.g. If ${rule.text || 'rule'} ${si === 0 ? 'holds' : 'fails'}…`}
-                          className="flex-1 bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        />
-                        <button type="button" onClick={() => removeScenario(i, si)} className="text-gray-600 hover:text-rose-400 shrink-0"><TrashIcon className="w-3.5 h-3.5" /></button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="ml-7 mt-1">
-                  <button type="button" onClick={() => addScenario(i)} className="text-xs text-amber-500 hover:text-amber-400 transition-colors">+ Add scenario</button>
-                </div>
-
                 {/* Rule type / branch / macro settings */}
                 <div className="ml-7 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {/* Rule Type */}
@@ -2460,7 +2349,7 @@ function TopicModal({ initial, onSave, onClose }) {
                 </div>
               </div>
             ))}
-            <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '', subs: [], scenarios: [] }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
+            <button type="button" onClick={() => setForm(f => ({ ...f, masterRules: [...(f.masterRules || []), { text: '' }] }))} className="text-xs text-indigo-400 hover:underline">+ Add master rule</button>
             {libraryRules.length > 0 && (
               <button type="button" onClick={() => setShowLibraryPicker(v => !v)} className="text-xs text-teal-400 hover:underline ml-4">{showLibraryPicker ? '— Close library' : '+ Import from Library'}</button>
             )}

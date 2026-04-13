@@ -7,7 +7,7 @@ const studyTopicSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     tags:        [{ type: String }],
     color:       { type: String, default: '#6366f1' }, // indigo default
-    masterRules: [{ type: mongoose.Schema.Types.Mixed }], // { text, subs, scenarios: [{ name }] }
+    masterRules: [{ type: mongoose.Schema.Types.Mixed }], // { text, ruleId, isFromLibrary, ruleType, macroTime, branchType, branchLabels, sortOrder }
 
     // Custom macro windows for this topic (e.g. ['9:30','9:50','10:10','10:50','11:10'])
     macroWindows: [{ type: String }],
