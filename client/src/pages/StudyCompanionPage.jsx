@@ -1061,44 +1061,67 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                           const branchA = (rule.branches || [])[0] || { label: 'Branch A', fired: false, timestamp: '', note: '' };
                           const branchB = (rule.branches || [])[1] || { label: 'Branch B', fired: false, timestamp: '', note: '' };
                           const neither = rule.neitherFired || false;
+                          const noneSelected = !branchA.fired && !branchB.fired && !neither;
                           const setFork = (choice) => {
+                            // Toggle off if clicking the already-active choice
+                            const toggling = (choice === 'A' && branchA.fired) || (choice === 'B' && branchB.fired) || (choice === 'neither' && neither);
                             const nb = [
-                              { ...branchA, fired: choice === 'A' },
-                              { ...branchB, fired: choice === 'B' },
+                              { ...branchA, fired: !toggling && choice === 'A' },
+                              { ...branchB, fired: !toggling && choice === 'B' },
                             ];
-                            updateRule(i, { branches: nb, neitherFired: choice === 'neither' });
+                            updateRule(i, { branches: nb, neitherFired: !toggling && choice === 'neither' });
                           };
+                          // Truncate label for button display — full text shown as subtitle
+                          const truncLabel = (lbl, max = 22) => lbl && lbl.length > max ? lbl.slice(0, max).trimEnd() + '…' : lbl;
+                          const activeBranch = branchA.fired ? branchA : branchB.fired ? branchB : null;
+                          const activeBi    = branchA.fired ? 0 : 1;
                           return (
                             <div className="space-y-2">
+                              {/* Toggle buttons */}
                               <div className="flex gap-2">
-                                <button type="button" onClick={() => setFork('A')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${branchA.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{branchA.label || 'Branch A'} fired</button>
-                                <button type="button" onClick={() => setFork('B')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${branchB.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{branchB.label || 'Branch B'} fired</button>
-                                <button type="button" onClick={() => setFork('neither')} className={`flex-1 py-1.5 rounded-lg border text-xs font-medium transition-colors ${neither ? 'bg-amber-700 border-amber-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-amber-600'}`}>Neither</button>
+                                <button type="button" onClick={() => setFork('A')} title={branchA.label || 'Branch A'} className={`flex-1 py-1.5 px-2 rounded-lg border text-xs font-medium transition-colors truncate ${branchA.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{truncLabel(branchA.label) || 'Branch A'}</button>
+                                <button type="button" onClick={() => setFork('B')} title={branchB.label || 'Branch B'} className={`flex-1 py-1.5 px-2 rounded-lg border text-xs font-medium transition-colors truncate ${branchB.fired ? 'bg-emerald-700 border-emerald-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-emerald-600'}`}>{truncLabel(branchB.label) || 'Branch B'}</button>
+                                <button type="button" onClick={() => setFork('neither')} className={`flex-1 py-1.5 px-2 rounded-lg border text-xs font-medium transition-colors ${neither ? 'bg-amber-700 border-amber-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-amber-600'}`}>Neither</button>
                               </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {[branchA, branchB].map((branch, bi) => (
-                                  <div key={bi} className={`rounded-lg border p-2.5 ${branch.fired ? 'border-emerald-700 bg-emerald-950/20' : neither ? 'border-gray-700 opacity-60 bg-gray-800/20' : 'border-gray-700 bg-gray-800/40'}`}>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                      <span className="text-xs font-medium text-gray-300">{branch.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
-                                      {branch.fired && (
-                                        <input
-                                          type="time"
-                                          value={branch.timestamp || ''}
-                                          onChange={(e) => { const nb = [...(rule.branches||[{},{  }])]; nb[bi] = {...nb[bi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
-                                          className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
-                                        />
-                                      )}
+                              {/* Full label as subtitle — only when a branch is selected */}
+                              {activeBranch && (
+                                <p className="text-[10px] text-emerald-400/80 leading-snug pl-0.5">{activeBranch.label}</p>
+                              )}
+                              {/* Note box — conditional: only show the selected branch */}
+                              {noneSelected && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {[branchA, branchB].map((branch, bi) => (
+                                    <div key={bi} className="rounded-lg border border-gray-700 bg-gray-800/30 p-2.5">
+                                      <span className="text-[10px] text-gray-600 font-medium block mb-1 truncate" title={branch.label}>{branch.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
+                                      <p className="text-[10px] text-gray-700 italic">Select above to log notes</p>
                                     </div>
-                                    <textarea
-                                      value={branch.note || ''}
-                                      onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[bi] = {...nb[bi], note: e.target.value}; updateRule(i, { branches: nb }); }}
-                                      placeholder={branch.fired ? 'What happened…' : 'What was watched for / why it did not trigger…'}
-                                      rows={2}
-                                      className={`${inputCls} text-xs`}
+                                  ))}
+                                </div>
+                              )}
+                              {activeBranch && (
+                                <div className="rounded-lg border border-emerald-700 bg-emerald-950/20 p-2.5">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-medium text-emerald-300">Notes</span>
+                                    <input
+                                      type="time"
+                                      value={activeBranch.timestamp || ''}
+                                      onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[activeBi] = {...nb[activeBi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
+                                      className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
                                     />
                                   </div>
-                                ))}
-                              </div>
+                                  <textarea
+                                    value={activeBranch.note || ''}
+                                    onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[activeBi] = {...nb[activeBi], note: e.target.value}; updateRule(i, { branches: nb }); }}
+                                    placeholder="What happened…"
+                                    rows={2}
+                                    className={`${inputCls} text-xs`}
+                                    autoFocus
+                                  />
+                                </div>
+                              )}
+                              {neither && (
+                                <p className="text-[10px] text-amber-500/70 pl-0.5 italic">Neither branch fired — no notes logged.</p>
+                              )}
                             </div>
                           );
                         })()}
@@ -1543,8 +1566,44 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         </button>
       </div>
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">Narrative</label>
-        <textarea rows={3} value={form.narrative} onChange={set('narrative')} placeholder="What is the story behind this setup?" className={`${inputCls} resize-none`} />
+        <div className="flex items-center justify-between mb-1">
+          <label className="text-xs font-medium text-gray-400">Narrative</label>
+          <button
+            type="button"
+            onClick={() => {
+              // Build narrative from all timestamped observations + fired branch notes, sorted by time
+              const lines = [];
+              (form.setupRules || []).forEach((rule, ri) => {
+                if (!rule.isMasterRule) return;
+                const ruleLabel = rule.text ? `Rule ${ri + 1} — ${rule.text}` : `Rule ${ri + 1}`;
+                // Observations from active scenario
+                const activeSi = rule.activeScenarioIndex ?? 0;
+                const obs = rule.scenarios?.[activeSi]?.observations || [];
+                obs.forEach(o => {
+                  if (o.note?.trim()) lines.push({ time: o.time || '', text: `[${o.time || '--:--'}] ${ruleLabel}: ${o.note.trim()}` });
+                });
+                // Fired branch note
+                (rule.branches || []).forEach(b => {
+                  if (b.fired && b.note?.trim()) lines.push({ time: b.timestamp || '', text: `[${b.timestamp || '--:--'}] ${ruleLabel} (${b.label || 'Branch'}): ${b.note.trim()}` });
+                });
+              });
+              // Sort by time string (HH:MM) — empty times sort to end
+              lines.sort((a, b) => {
+                if (!a.time && !b.time) return 0;
+                if (!a.time) return 1;
+                if (!b.time) return -1;
+                return a.time.localeCompare(b.time);
+              });
+              const built = lines.map(l => l.text).join('\n');
+              setForm(f => ({ ...f, narrative: built || f.narrative }));
+            }}
+            className="text-[10px] text-indigo-400 hover:text-indigo-300 border border-indigo-800 hover:border-indigo-600 rounded px-2 py-0.5 transition-colors"
+            title="Auto-fill from timestamped observations and branch notes"
+          >
+            ↻ Sync from observations
+          </button>
+        </div>
+        <textarea rows={3} value={form.narrative} onChange={set('narrative')} placeholder="What is the story behind this setup? Or click ↻ to auto-fill from observations…" className={`${inputCls} resize-none`} />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Notes</label>
@@ -1955,7 +2014,7 @@ function SetupCard({ setup, onEdit, onDelete }) {
                 {setup.narrative && (
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Narrative</p>
-                    <p className="text-sm text-gray-300 leading-relaxed">{setup.narrative}</p>
+                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{setup.narrative}</p>
                   </div>
                 )}
                 {setup.notes && (
