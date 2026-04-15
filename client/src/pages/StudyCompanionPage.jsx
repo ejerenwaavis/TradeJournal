@@ -1021,8 +1021,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                         {rule.branchType === 'single' && (
                           <div className="space-y-2">
                             {(rule.branches || []).slice(0, 1).map((branch, bi) => (
-                              <div key={bi} className={`rounded-lg border p-3 ${branch.fired ? 'border-emerald-700 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'}`}>
-                                <div className="flex items-center gap-2 mb-2">
+                              <div key={bi} className="flex items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -1035,22 +1034,6 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                                     {branch.fired ? '✓ Fired' : '○ Not Fired'}
                                   </button>
                                   <span className="text-xs font-medium text-gray-300">{branch.label || 'Branch A'}</span>
-                                  {branch.fired && (
-                                    <input
-                                      type="time"
-                                      value={branch.timestamp || ''}
-                                      onChange={(e) => { const nb = [...(rule.branches||[])]; nb[bi] = {...nb[bi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
-                                      className="ml-auto bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                                    />
-                                  )}
-                                </div>
-                                <textarea
-                                  value={branch.note || ''}
-                                  onChange={(e) => { const nb = [...(rule.branches||[])]; nb[bi] = {...nb[bi], note: e.target.value}; updateRule(i, { branches: nb }); }}
-                                  placeholder={branch.fired ? 'Describe what happened…' : 'What was being watched for and why it did not trigger…'}
-                                  rows={2}
-                                  className={`${inputCls} text-xs`}
-                                />
                               </div>
                             ))}
                           </div>
@@ -1087,40 +1070,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                               {activeBranch && (
                                 <p className="text-[10px] text-emerald-400/80 leading-snug pl-0.5">{activeBranch.label}</p>
                               )}
-                              {/* Note box — conditional: only show the selected branch */}
-                              {noneSelected && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {[branchA, branchB].map((branch, bi) => (
-                                    <div key={bi} className="rounded-lg border border-gray-700 bg-gray-800/30 p-2.5">
-                                      <span className="text-[10px] text-gray-600 font-medium block mb-1 truncate" title={branch.label}>{branch.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
-                                      <p className="text-[10px] text-gray-700 italic">Select above to log notes</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {activeBranch && (
-                                <div className="rounded-lg border border-emerald-700 bg-emerald-950/20 p-2.5">
-                                  <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-xs font-medium text-emerald-300">Notes</span>
-                                    <input
-                                      type="time"
-                                      value={activeBranch.timestamp || ''}
-                                      onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[activeBi] = {...nb[activeBi], timestamp: e.target.value}; updateRule(i, { branches: nb }); }}
-                                      className="bg-gray-800 border border-gray-700 rounded px-1.5 py-0.5 text-xs text-gray-300 focus:outline-none"
-                                    />
-                                  </div>
-                                  <textarea
-                                    value={activeBranch.note || ''}
-                                    onChange={(e) => { const nb = [...(rule.branches||[{},{}])]; nb[activeBi] = {...nb[activeBi], note: e.target.value}; updateRule(i, { branches: nb }); }}
-                                    placeholder="What happened…"
-                                    rows={2}
-                                    className={`${inputCls} text-xs`}
-                                    autoFocus
-                                  />
-                                </div>
-                              )}
                               {neither && (
-                                <p className="text-[10px] text-amber-500/70 pl-0.5 italic">Neither branch fired — no notes logged.</p>
+                                <p className="text-[10px] text-amber-500/70 pl-0.5 italic">Neither branch fired.</p>
                               )}
                             </div>
                           );
