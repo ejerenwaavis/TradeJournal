@@ -6,7 +6,11 @@
       "Bash(node *)",
       "Bash(cd * && node *)",
       "Bash(npm *)",
-      "Bash(cd * && npm *)"
+      "Bash(cd * && npm *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git checkout *)",
+      "Bash(git merge analytics-claude-code --no-ff -m ' *)"
     ]
   }
 }
