@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
+import { Link } from 'react-router-dom';
 import { ICT_TAGS } from '../utils/ictTags';
 import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon, XMarkIcon, BookOpenIcon } from '@heroicons/react/24/outline';
 
@@ -46,6 +47,15 @@ function StatBlock({ label, value, sub }) {
 function TopicAnalytics({ topicId }) {
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
+  const [patternData, setPatternData] = useState({ rules: null, sequences: null, narrative: null, macros: null });
+  const [patternLoading, setPatternLoading] = useState({ rules: false, sequences: false, narrative: false, macros: false });
+
+  const PANEL_META = {
+    rules: { title: 'Rule Performance', threshold: 20 },
+    sequences: { title: 'Session Sequences', threshold: 30 },
+    narrative: { title: 'Narrative Signals', threshold: 40 },
+    macros: { title: 'Macro Behavior', threshold: 50 },
+  };
 
   useEffect(() => {
     if (!topicId || !open) return;
@@ -53,6 +63,40 @@ function TopicAnalytics({ topicId }) {
       .then(({ data }) => setData(data))
       .catch(() => {});
   }, [topicId, open]);
+
+  useEffect(() => {
+    if (!topicId || !open) return;
+    ['rules', 'sequences', 'narrative', 'macros'].forEach(async (panel) => {
+      setPatternLoading(prev => ({ ...prev, [panel]: true }));
+      try {
+        const { data } = await api.get(`/analytics/patterns/${panel}?topicId=${topicId}`);
+        setPatternData(prev => ({ ...prev, [panel]: data }));
+      } catch {
+        // Keep panel empty; user can retry analyze.
+      } finally {
+        setPatternLoading(prev => ({ ...prev, [panel]: false }));
+      }
+    });
+  }, [topicId, open]);
+
+  const analyzePanel = async (panel) => {
+    if (!topicId) return;
+    setPatternLoading(prev => ({ ...prev, [panel]: true }));
+    try {
+      const { data } = await api.get(`/analytics/patterns/${panel}?topicId=${topicId}&refresh=true`);
+      setPatternData(prev => ({ ...prev, [panel]: data }));
+    } catch {
+      toast.error('Pattern analysis failed. Please try again.');
+    } finally {
+      setPatternLoading(prev => ({ ...prev, [panel]: false }));
+    }
+  };
+
+  const analyzeAllPanels = async () => {
+    for (const panel of ['rules', 'sequences', 'narrative', 'macros']) {
+      await analyzePanel(panel);
+    }
+  };
 
   if (!topicId) return null;
 
@@ -224,6 +268,59 @@ function TopicAnalytics({ topicId }) {
                   </div>
                 </div>
               )}
+
+              {/* Embedded Pattern Analytics */}
+              <div className="pt-2 border-t border-gray-800">
+                <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                  <SectionHeading>Pattern Analytics</SectionHeading>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={analyzeAllPanels}
+                      disabled={Object.values(patternLoading).some(Boolean)}
+                      className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+                    >
+                      Analyze All
+                    </button>
+                    <Link
+                      to="/study/analytics"
+                      className="text-xs border border-gray-700 hover:border-indigo-500 text-gray-300 px-3 py-1.5 rounded-lg font-medium transition-colors"
+                    >
+                      Open Full Analytics
+                    </Link>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">Embedded here for this topic. Thresholds: rules 20+, sequences 30+, narrative 40+, macros 50+.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {Object.entries(PANEL_META).map(([panel, meta]) => {
+                    const pData = patternData[panel];
+                    const isLoading = patternLoading[panel];
+                    return (
+                      <div key={panel} className="bg-gray-800 border border-gray-700 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-gray-300">{meta.title}</p>
+                          <button
+                            type="button"
+                            onClick={() => analyzePanel(panel)}
+                            disabled={isLoading}
+                            className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-2.5 py-1 rounded-md"
+                          >
+                            {isLoading ? 'Analyzing...' : pData ? 'Re-analyze' : 'Analyze'}
+                          </button>
+                        </div>
+                        {!isLoading && !pData && <p className="text-xs text-gray-500">Run analysis to see patterns.</p>}
+                        {isLoading && <p className="text-xs text-gray-500 animate-pulse">Computing...</p>}
+                        {!isLoading && pData?.insufficientData && (
+                          <p className="text-xs text-gray-500">{pData.entryCount} entries — need {meta.threshold}+.</p>
+                        )}
+                        {!isLoading && pData && !pData.insufficientData && (
+                          <p className="text-xs text-gray-400">Updated and ready.</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </>
           )}
         </div>
@@ -808,7 +905,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-1.5">
                           <span className="text-xs text-gray-600 shrink-0 mt-0.5">{idx + 1}.</span>
-                          <p className={`text-sm leading-snug ${rule.checked ? 'text-emerald-300' : 'text-gray-300'}`}>{rule.text}</p>
+                          <p className={`text-sm leading-snug ${rule.checked ? 'fired-rule-text' : 'text-gray-300'}`}>{rule.text}</p>
                         </div>
                         {(rule.subs || []).filter(sub => typeof sub === 'string' ? sub : sub?.text).map((sub, j) => {
                           const subObj = typeof sub === 'string' ? { text: sub, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }] } : sub;
@@ -1820,11 +1917,11 @@ function SetupCard({ setup, onEdit, onDelete }) {
                         return (
                           <li key={i}>
                             <div className="flex gap-2 items-start">
-                              <span className={`shrink-0 mt-0.5 text-sm font-medium ${isMasterRule ? (checked ? 'text-emerald-400' : 'text-gray-600') : 'text-gray-600'}`}>
+                              <span className={`shrink-0 mt-0.5 text-sm font-medium ${isMasterRule ? (checked ? 'fired-rule-icon' : 'text-gray-600') : 'text-gray-600'}`}>
                                 {isMasterRule ? (checked ? '✓' : '○') : `${freeNum}.`}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <p className={`text-sm leading-snug ${isMasterRule && checked ? 'text-emerald-300' : isMasterRule && !checked ? 'text-gray-500' : 'text-gray-300'}`}>
+                                <p className={`text-sm leading-snug ${isMasterRule && checked ? 'fired-rule-text' : isMasterRule && !checked ? 'text-gray-500' : 'text-gray-300'}`}>
                                   {text}
                                 </p>
                                 {(subs).filter(s => typeof s === 'string' ? s : s?.text).map((s, j) => {
@@ -1908,7 +2005,7 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                   <div className="mt-2 border-t border-gray-700/40 pt-2">
                                     {rObj.branchType === 'single' && (rObj.branches || []).slice(0, 1).map((b, bi) => (
                                       <div key={bi} className="flex items-start gap-2">
-                                        <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'text-emerald-400' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
+                                        <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'fired-rule-icon' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
                                         <div>
                                           <span className="text-xs text-gray-400">{b.label || 'Branch A'}</span>
                                           {b.fired && b.timestamp && <span className="text-xs text-gray-500 ml-1.5">@ {b.timestamp}</span>}
@@ -1921,9 +2018,9 @@ function SetupCard({ setup, onEdit, onDelete }) {
                                         {rObj.neitherFired && <p className="text-xs text-amber-500 font-medium">Neither branch fired</p>}
                                         {(rObj.branches || []).map((b, bi) => (
                                           <div key={bi} className={`flex items-start gap-2 ${!b.fired && !rObj.neitherFired ? 'opacity-50' : ''}`}>
-                                            <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'text-emerald-400' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
+                                            <span className={`shrink-0 text-xs font-medium mt-0.5 ${b.fired ? 'fired-rule-icon' : 'text-gray-600'}`}>{b.fired ? '✓' : '○'}</span>
                                             <div>
-                                              <span className={`text-xs font-medium ${b.fired ? 'text-emerald-300' : 'text-gray-500'}`}>{b.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
+                                              <span className={`text-xs font-medium ${b.fired ? 'fired-rule-text' : 'text-gray-500'}`}>{b.label || `Branch ${String.fromCharCode(65+bi)}`}</span>
                                               {b.fired && b.timestamp && <span className="text-xs text-gray-500 ml-1.5">@ {b.timestamp}</span>}
                                               {b.note && <p className={`text-xs ${b.fired ? 'text-gray-300' : 'text-gray-600'} mt-0.5`}>{b.note}</p>}
                                             </div>
@@ -2539,6 +2636,152 @@ function MasterRulesCard({ topic, onEdit }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// TopicSharePanel — topic-level share system
+// ════════════════════════════════════════════════════════════════════════════
+function TopicSharePanel({ topic, onTopicUpdate }) {
+  const [open, setOpen]           = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [copiedField, setCopied]  = useState(null); // 'url' | 'key' | 'endpoint'
+  const [apiKey, setApiKey]       = useState(topic.apiKey || null);
+  const [shareToken, setShareToken] = useState(topic.shareToken || null);
+  const [isPublic, setIsPublic]   = useState(topic.isPublic || false);
+
+  // Keep in sync if topic prop changes from outside
+  useState(() => {
+    setApiKey(topic.apiKey || null);
+    setShareToken(topic.shareToken || null);
+    setIsPublic(topic.isPublic || false);
+  });
+
+  const shareUrl    = shareToken ? `${window.location.origin}/study/${shareToken}` : null;
+  const apiEndpoint = shareToken ? `${window.location.origin}/api/study/${shareToken}/entries` : null;
+
+  async function copy(text, field) {
+    try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
+    setCopied(field);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  async function handleShare() {
+    setLoading(true);
+    try {
+      const res = await api.post(`/study/topics/${topic._id}/share`);
+      setShareToken(res.data.shareToken);
+      setApiKey(res.data.apiKey);
+      setIsPublic(true);
+      onTopicUpdate && onTopicUpdate({ ...topic, isPublic: true, shareToken: res.data.shareToken, apiKey: res.data.apiKey });
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  }
+
+  async function handleUnshare() {
+    setLoading(true);
+    try {
+      await api.post(`/study/topics/${topic._id}/unshare`);
+      setIsPublic(false);
+      onTopicUpdate && onTopicUpdate({ ...topic, isPublic: false });
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  }
+
+  async function handleRegenerateKey() {
+    setLoading(true);
+    try {
+      const res = await api.post(`/study/topics/${topic._id}/regenerate-key`);
+      setApiKey(res.data.apiKey);
+      onTopicUpdate && onTopicUpdate({ ...topic, apiKey: res.data.apiKey });
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-5 py-3 text-sm font-semibold text-gray-300 hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <LinkIcon className="w-4 h-4 text-gray-500" />
+          <span>Share Study</span>
+          {isPublic && <span className="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded-full font-medium">Public</span>}
+        </div>
+        {open ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+      </button>
+
+      {open && (
+        <div className="p-5 border-t border-gray-800 space-y-4">
+          {!isPublic ? (
+            /* ── State A: Private ── */
+            <div className="text-center py-2">
+              <p className="text-sm text-gray-400 mb-3">Share your full study catalog with others or external tools via a stable link and API key.</p>
+              <button
+                onClick={handleShare}
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+              >
+                {loading ? 'Sharing…' : 'Share Study'}
+              </button>
+            </div>
+          ) : (
+            /* ── State B: Public ── */
+            <div className="space-y-3">
+              {/* Share URL */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">Share URL (browser link)</p>
+                <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-300 flex-1 truncate font-mono">{shareUrl}</span>
+                  <button onClick={() => copy(shareUrl, 'url')} className="text-xs text-indigo-400 hover:text-indigo-300 shrink-0 font-medium">
+                    {copiedField === 'url' ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* API Endpoint */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">API Endpoint</p>
+                <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-300 flex-1 truncate font-mono">{apiEndpoint}</span>
+                  <button onClick={() => copy(apiEndpoint, 'endpoint')} className="text-xs text-indigo-400 hover:text-indigo-300 shrink-0 font-medium">
+                    {copiedField === 'endpoint' ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              {/* API Key */}
+              <div>
+                <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wider">API Key</p>
+                <div className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                  <span className="text-xs text-gray-300 flex-1 truncate font-mono">{apiKey || '—'}</span>
+                  <button onClick={() => copy(apiKey, 'key')} className="text-xs text-indigo-400 hover:text-indigo-300 shrink-0 font-medium">
+                    {copiedField === 'key' ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="text-xs text-rose-400 mt-1.5">⚠ Keep this key private. Anyone with it can read all your entries.</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleRegenerateKey}
+                  disabled={loading}
+                  className="text-xs bg-gray-800 hover:bg-gray-700 text-amber-400 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? '…' : 'Regenerate Key'}
+                </button>
+                <button
+                  onClick={handleUnshare}
+                  disabled={loading}
+                  className="text-xs bg-gray-800 hover:bg-gray-700 text-rose-400 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? '…' : 'Make Private'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // ReviewDiscoveriesPanel — aggregates discoveries from all setups, lets you
 // promote frequently-seen ones to master rules
 // ════════════════════════════════════════════════════════════════════════════
@@ -2780,6 +3023,7 @@ export default function StudyCompanionPage() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="text-xs text-gray-600">{t.setupCount || 0}</span>
+                  {t.isPublic && <span className="text-xs text-emerald-600" title="Public">●</span>}
                   <div className="hidden group-hover:flex gap-0.5">
                     <button onClick={(e) => { e.stopPropagation(); handleCloneTopic(t._id); }} className="text-gray-500 hover:text-emerald-400 p-0.5" title="Clone topic"><DocumentDuplicateIcon className="w-3 h-3" /></button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingTopic(t); setShowTopicModal(true); }} className="text-gray-500 hover:text-indigo-400 p-0.5"><PencilIcon className="w-3 h-3" /></button>
@@ -2851,6 +3095,15 @@ export default function StudyCompanionPage() {
             <MasterRulesCard
               topic={activeTopic}
               onEdit={() => { setEditingTopic(activeTopic); setShowTopicModal(true); }}
+            />
+
+            {/* Topic share panel */}
+            <TopicSharePanel
+              topic={activeTopic}
+              onTopicUpdate={(updated) => {
+                setActiveTopic(updated);
+                setTopics(prev => prev.map(t => t._id === updated._id ? { ...t, ...updated } : t));
+              }}
             />
 
             {/* 25-setup review cadence banner */}
