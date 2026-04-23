@@ -98,6 +98,15 @@ button {
   --toast-border: #e2e8f0;
 }
 
+/* ── Fired/checked rule text — high-contrast in both themes ── */
+/* Dark mode default: bright emerald-300/400 */
+.fired-rule-text { color: oklch(0.840 0.123 163.225); }  /* emerald-300 */
+.fired-rule-icon { color: oklch(0.765 0.140 163.050); }  /* emerald-400 */
+
+/* Light mode: invert to dark green for legibility on light backgrounds */
+[data-theme="light"] .fired-rule-text { color: #166534; }
+[data-theme="light"] .fired-rule-icon { color: #14532d; }
+
 /* ── Light theme text legibility fixes ── */
 /* The gray scale inversion makes gray-100 very dark, so text-gray-100 becomes
    near-black on a near-white background — which is correct and readable.

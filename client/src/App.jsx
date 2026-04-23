@@ -24,6 +24,7 @@ import StudyAnalyticsPage from './pages/StudyAnalyticsPage';
 import SettingsPage from './pages/SettingsPage';
 import RuleLibraryPage from './pages/RuleLibraryPage';
 import SharedSetupPage from './pages/SharedSetupPage';
+import SharedStudyPage from './pages/SharedStudyPage';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -50,6 +51,17 @@ export default function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-use" element={<TermsOfUsePage />} />
           <Route path="/share/:token" element={<SharedSetupPage />} />
+          <Route
+            path="/study/analytics"
+            element={
+              <RequireAuth>
+                <Layout>
+                  <StudyAnalyticsPage />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+          <Route path="/study/:shareToken" element={<SharedStudyPage />} />
           <Route
             path="/*"
             element={

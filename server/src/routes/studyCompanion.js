@@ -286,6 +286,9 @@ router.post('/setups', auth, async (req, res) => {
 // PUT /api/study/setups/:id
 router.put('/setups/:id', auth, async (req, res) => {
   try {
+    const setup = await StudySetup.findOne({ _id: req.params.id, userId: req.userId });
+    if (!setup) return res.status(404).json({ error: 'Setup not found' });
+
     const body = { ...req.body };
     // Server-compute scores — never trust client
     const { completionRate, firedRulesCount, totalRulesCount } = computeCompletion(body.setupRules);
@@ -294,12 +297,9 @@ router.put('/setups/:id', auth, async (req, res) => {
     body.totalRulesCount = totalRulesCount;
     // Derive rMultiple per opportunity
     body.opportunities = deriveOpportunityFields(body.opportunities);
-    const setup = await StudySetup.findOneAndUpdate(
-      { _id: req.params.id, userId: req.userId },
-      body,
-      { new: true, runValidators: false }
-    );
-    if (!setup) return res.status(404).json({ error: 'Setup not found' });
+
+    Object.assign(setup, body);
+    await setup.save(); // triggers pre-save hook → dayOfWeek auto-derived from date
     res.json({ setup });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -322,7 +322,7 @@ router.delete('/setups/:id', auth, async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 // GET /api/study/analytics/:topicId
-router.get('/analytics/:topicId', auth, async (req, res) => {
+router.get('/analytics/:topicId([0-9a-fA-F]{24})', auth, async (req, res) => {
   try {
     const setups = await StudySetup.find({ topicId: req.params.topicId, userId: req.userId });
     if (!setups.length) return res.json({ empty: true });
@@ -652,6 +652,226 @@ router.get('/share/:token', async (req, res) => {
     // Include the topic name for context
     const topic = await StudyTopic.findById(setup.topicId).select('name color').lean();
     res.json({ setup, topic });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// TOPIC-LEVEL SHARE SYSTEM
+// ════════════════════════════════════════════════════════════════════════════
+
+// POST /api/study/topics/:topicId/share
+router.post('/topics/:topicId/share', auth, async (req, res) => {
+  try {
+    const topic = await StudyTopic.findOne({ _id: req.params.topicId, userId: req.userId });
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+
+    // Generate shareToken once (stable — never regenerated)
+    if (!topic.shareToken) {
+      topic.shareToken = crypto.randomBytes(20).toString('hex');
+    }
+    // Generate apiKey if not present
+    if (!topic.apiKey) {
+      topic.apiKey = crypto.randomBytes(32).toString('hex');
+    }
+    topic.isPublic = true;
+    await topic.save();
+
+    const base = `${req.protocol}://${req.get('host')}`;
+    res.json({
+      shareToken: topic.shareToken,
+      apiKey: topic.apiKey,
+      shareUrl: `${base}/study/${topic.shareToken}`,
+      apiEndpoint: `${base}/api/study/${topic.shareToken}/entries`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/study/topics/:topicId/unshare
+router.post('/topics/:topicId/unshare', auth, async (req, res) => {
+  try {
+    const topic = await StudyTopic.findOne({ _id: req.params.topicId, userId: req.userId });
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+    topic.isPublic = false;  // preserves shareToken and apiKey
+    await topic.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/study/topics/:topicId/regenerate-key
+router.post('/topics/:topicId/regenerate-key', auth, async (req, res) => {
+  try {
+    const topic = await StudyTopic.findOne({ _id: req.params.topicId, userId: req.userId });
+    if (!topic) return res.status(404).json({ error: 'Topic not found' });
+    topic.apiKey = crypto.randomBytes(32).toString('hex');
+    await topic.save();
+    res.json({ apiKey: topic.apiKey });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/study/:shareToken  — public topic metadata (no auth)
+// Must be placed AFTER all literal-path routes to avoid conflicts
+router.get('/:shareToken', async (req, res) => {
+  try {
+    const topic = await StudyTopic.findOne({ shareToken: req.params.shareToken, isPublic: true }).lean();
+    if (!topic) return res.status(404).json({ error: 'Topic not found or not public' });
+
+    const [entryCount, setups] = await Promise.all([
+      StudySetup.countDocuments({ topicId: topic._id }),
+      StudySetup.find({ topicId: topic._id }, 'date').sort({ date: 1 }).lean(),
+    ]);
+
+    const dates = setups.map(s => s.date).filter(Boolean);
+    const dateRange = dates.length >= 2
+      ? { from: dates[0], to: dates[dates.length - 1] }
+      : dates.length === 1 ? { from: dates[0], to: dates[0] } : null;
+
+    res.json({
+      name: topic.name,
+      description: topic.description,
+      color: topic.color,
+      masterRules: topic.masterRules,
+      macroWindows: topic.macroWindows,
+      entryCount,
+      dateRange,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/study/:shareToken/entries  — public entries (no auth, requires apiKey)
+router.get('/:shareToken/entries', async (req, res) => {
+  try {
+    const topic = await StudyTopic.findOne({ shareToken: req.params.shareToken, isPublic: true }).lean();
+    if (!topic) return res.status(404).json({ error: 'Topic not found or not public' });
+
+    // Validate apiKey — support ?apiKey= or Authorization: Bearer
+    const providedKey =
+      req.query.apiKey ||
+      (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
+    if (!providedKey || providedKey !== topic.apiKey) {
+      return res.status(401).json({ error: 'Invalid or missing API key' });
+    }
+
+    // Build filter
+    const filter = { topicId: topic._id };
+    if (req.query.direction)   filter.direction = req.query.direction;
+    if (req.query.dayOfWeek)   filter.dayOfWeek = req.query.dayOfWeek;
+    if (req.query.clarityScore) filter.clarityScore = Number(req.query.clarityScore);
+    if (req.query.from || req.query.to) {
+      filter.date = {};
+      if (req.query.from) filter.date.$gte = new Date(req.query.from);
+      if (req.query.to)   filter.date.$lte = new Date(req.query.to);
+    }
+
+    const limit  = Math.min(Number(req.query.limit)  || 50, 200);
+    const offset = Number(req.query.offset) || 0;
+
+    const [total, setups] = await Promise.all([
+      StudySetup.countDocuments(filter),
+      StudySetup.find(filter)
+        .sort({ date: -1 })
+        .skip(offset)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    // Strip private fields
+    const entries = setups.map(({ userId, _id, topicId, __v, ...pub }) => pub);
+
+    res.json({ total, limit, offset, entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// TREND ANALYTICS — rolling performance over time
+// GET /api/study/analytics/trend?topicId=&window=10
+// ════════════════════════════════════════════════════════════════════════════
+router.get('/analytics/trend', auth, async (req, res) => {
+  try {
+    const { topicId } = req.query;
+    if (!topicId) return res.status(400).json({ error: 'topicId required' });
+    const windowSize = Math.min(Math.max(parseInt(req.query.window) || 10, 3), 50);
+
+    const setups = await StudySetup.find({ topicId, userId: req.userId })
+      .sort({ date: 1, createdAt: 1 })
+      .lean();
+
+    if (setups.length < 5) return res.json({ insufficientData: true, entryCount: setups.length });
+
+    function getBestRMultiple(s) {
+      const opps = s.opportunities || [];
+      if (opps.length) {
+        const vals = opps.map(o => o?.rMultiple).filter(v => v != null);
+        if (vals.length) return Math.max(...vals);
+      }
+      return s.rMultiple ?? null;
+    }
+
+    // Build entry array with rolling values
+    const entries = setups.map((s, idx) => {
+      const window = setups.slice(Math.max(0, idx - windowSize + 1), idx + 1);
+      const windowR  = window.map(getBestRMultiple).filter(r => r != null);
+      const windowTB = window.filter(w => w.outcome === 'Textbook').length;
+      const windowCR = window.map(w => w.completionRate).filter(v => v != null);
+
+      return {
+        date: s.date,
+        rMultiple: getBestRMultiple(s),
+        completionRate: s.completionRate,
+        clarityScore: s.clarityScore,
+        outcome: s.outcome,
+        direction: s.direction,
+        rollingAvgR: windowR.length ? parseFloat((windowR.reduce((a, b) => a + b, 0) / windowR.length).toFixed(2)) : null,
+        rollingTextbookRate: parseFloat(((windowTB / window.length) * 100).toFixed(1)),
+        rollingCompletionRate: windowCR.length ? parseFloat((windowCR.reduce((a, b) => a + b, 0) / windowCR.length).toFixed(1)) : null,
+      };
+    });
+
+    // Period comparison: first third vs last third
+    const thirdLen = Math.max(1, Math.floor(setups.length / 3));
+    const early  = setups.slice(0, thirdLen);
+    const recent = setups.slice(setups.length - thirdLen);
+
+    function periodStats(group) {
+      const rVals = group.map(getBestRMultiple).filter(v => v != null);
+      const tbCount = group.filter(s => s.outcome === 'Textbook').length;
+      const crVals = group.map(s => s.completionRate).filter(v => v != null);
+      return {
+        count: group.length,
+        avgR: rVals.length ? parseFloat((rVals.reduce((a, b) => a + b, 0) / rVals.length).toFixed(2)) : null,
+        textbookRate: parseFloat(((tbCount / group.length) * 100).toFixed(1)),
+        completionRate: crVals.length ? parseFloat((crVals.reduce((a, b) => a + b, 0) / crVals.length).toFixed(1)) : null,
+      };
+    }
+
+    const earlyStats  = periodStats(early);
+    const recentStats = periodStats(recent);
+
+    const delta = {
+      avgR: earlyStats.avgR != null && recentStats.avgR != null
+        ? parseFloat((recentStats.avgR - earlyStats.avgR).toFixed(2)) : null,
+      textbookRate: parseFloat((recentStats.textbookRate - earlyStats.textbookRate).toFixed(1)),
+      completionRate: earlyStats.completionRate != null && recentStats.completionRate != null
+        ? parseFloat((recentStats.completionRate - earlyStats.completionRate).toFixed(1)) : null,
+    };
+
+    res.json({
+      entries,
+      periodComparison: { early: earlyStats, recent: recentStats, delta },
+      windowSize,
+      totalEntries: setups.length,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

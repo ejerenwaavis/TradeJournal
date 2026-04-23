@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node server/src/migrations/fixBranchSourceOfTruth.js)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(cd * && node *)",
+      "Bash(npm *)",
+      "Bash(cd * && npm *)"
+    ]
+  }
+}

@@ -18,6 +18,11 @@ const studyTopicSchema = new mongoose.Schema(
       showMarketStructure: { type: Boolean, default: true },
       showPDArray:         { type: Boolean, default: true },
     },
+
+    // Topic-level public sharing
+    isPublic:   { type: Boolean, default: false },
+    shareToken: { type: String, unique: true, sparse: true },  // stable UUID for browser link
+    apiKey:     { type: String, unique: true, sparse: true },  // resource key for API access (never logged)
   },
   { timestamps: true }
 );

@@ -92,18 +92,18 @@ export default function SharedSetupPage() {
                 if (!rObj.text) return null;
                 return (
                   <li key={i} className="flex gap-2 items-start">
-                    <span className={`shrink-0 mt-0.5 text-sm ${rObj.isMasterRule ? (rObj.checked ? 'text-emerald-400' : 'text-gray-600') : 'text-gray-500'}`}>
+                    <span className={`shrink-0 mt-0.5 text-sm ${rObj.isMasterRule ? (rObj.checked ? 'fired-rule-icon' : 'text-gray-600') : 'text-gray-500'}`}>
                       {rObj.isMasterRule ? (rObj.checked ? '✓' : '○') : `${i + 1}.`}
                     </span>
                     <div>
-                      <p className={`text-sm ${rObj.isMasterRule && rObj.checked ? 'text-emerald-300' : rObj.isMasterRule && !rObj.checked ? 'text-gray-500' : 'text-gray-300'}`}>
+                      <p className={`text-sm ${rObj.isMasterRule && rObj.checked ? 'fired-rule-text' : rObj.isMasterRule && !rObj.checked ? 'text-gray-500' : 'text-gray-300'}`}>
                         {rObj.text}
                       </p>
                       {/* Branch outcomes */}
                       {rObj.branchType && rObj.branchType !== 'none' && rObj.branches?.length > 0 && (
                         <div className="mt-1 space-y-1">
                           {rObj.branches.map((b, bi) => (
-                            <p key={bi} className={`text-xs ${b.fired ? 'text-emerald-400' : 'text-gray-600'}`}>
+                            <p key={bi} className={`text-xs ${b.fired ? 'fired-rule-icon' : 'text-gray-600'}`}>
                               {b.fired ? '✓' : '○'} {b.label || `Branch ${String.fromCharCode(65 + bi)}`}
                               {b.fired && b.timestamp ? ` @ ${b.timestamp}` : ''}
                               {b.note ? ` — ${b.note}` : ''}
