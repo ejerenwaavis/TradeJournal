@@ -608,10 +608,10 @@ function TrendSection({ topics, topicsLoading, topicId, setTopicId }) {
 
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 20;
-  const reversedEntries = trendData ? [...trendData.entries].reverse() : [];
+  const reversedEntries = trendData?.entries ? [...trendData.entries].reverse() : [];
   const pageEntries = reversedEntries.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const maxR = trendData ? Math.max(...trendData.entries.map(e => Math.abs(e.rMultiple || 0)), 1) : 1;
+  const maxR = trendData?.entries?.length ? Math.max(...trendData.entries.map(e => Math.abs(e.rMultiple || 0)), 1) : 1;
 
   return (
     <div className="space-y-6">
