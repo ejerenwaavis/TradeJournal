@@ -23,8 +23,10 @@ const rulesRoutes = require('./routes/rules');
 const patternsRoutes = require('./routes/patterns');
 
 const app = express();
-// Passenger injects PORT dynamically; fallback to 5000 for local dev
-const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+// Use a fixed API port in local dev so Vite proxy always targets one backend.
+// Passenger/cPanel still provides PORT in production.
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
@@ -55,15 +57,18 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/rules', rulesRoutes);
 app.use('/api/analytics/patterns', patternsRoutes);
 
-// ── Serve React frontend (production / Namecheap Passenger) ──────────────────
-// Repo layout: server/src/index.js  →  ../../public_html
-const FRONTEND_DIR = path.resolve(__dirname, '../../public_html');
-app.use(express.static(FRONTEND_DIR));
+// ── Serve React frontend only in production (Passenger) ──────────────────────
+// In local development, Vite on 5173 is the single frontend source of truth.
+if (isProduction) {
+  // Repo layout: server/src/index.js  →  ../../public_html
+  const FRONTEND_DIR = path.resolve(__dirname, '../../public_html');
+  app.use(express.static(FRONTEND_DIR));
 
-// SPA catch-all — must come after all /api routes
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
-});
+  // SPA catch-all — must come after all /api routes
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+  });
+}
 
 // ── Database + server start ───────────────────────────────────────────────────
 console.log(`MONGODB_URI configured: ${!!process.env.MONGODB_URI}`);
@@ -73,7 +78,10 @@ mongoose
   .then(() => {
     console.log('MongoDB connected successfully');
     console.log(`Node.js ${process.version} | ENV: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Frontend dir: ${FRONTEND_DIR}`);
+    if (isProduction) {
+      const frontendDir = path.resolve(__dirname, '../../public_html');
+      console.log(`Frontend dir: ${frontendDir}`);
+    }
   })
   .catch((err) => {
     // Log the error but do NOT exit — Passenger must keep running so /health still responds
@@ -81,24 +89,19 @@ mongoose
   });
 
 // Listen immediately — do not gate on MongoDB connect
-// Passenger may use module.exports instead, but calling listen is harmless and ensures local dev works
-const startServer = (port) => {
-  const server = app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-    console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects /api/study /api/backup');
-  });
+// Keep one explicit app listener to avoid implicit secondary dev ports.
+const server = app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+  console.log('Routes: /api/auth /api/trades /api/charts /api/analytics /api/insights /api/backtest-projects /api/study /api/backup');
+});
 
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.warn(`Port ${port} is busy, trying port ${port + 1}...`);
-      startServer(port + 1);
-      return;
-    }
-    throw err;
-  });
-};
-
-startServer(PORT);
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Stop the other process using this port and restart.`);
+    process.exit(1);
+  }
+  throw err;
+});
 
 // Passenger requires the app to be exported
 module.exports = app;
