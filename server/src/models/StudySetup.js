@@ -109,6 +109,13 @@ const studySetupSchema = new mongoose.Schema(
     sweepType2: { type: String, enum: ['Buyside', 'Sellside', 'Both', 'None', ''], default: '' },
     sweepStyle: { type: String, enum: ['Intent', 'Fakeout', 'Both', 'None', ''], default: '' },
     maxPts:     { type: Number },
+
+    // ── Rule Registry — ML Parameters ──────────────────────────────────────
+    // Schema version tracks structural evolution of mlParameters
+    schemaVersion: { type: Number, default: 1 },
+    // Pre-validated ML parameters — keys match mlKey from rules-registry.js
+    // Separated from setupRules (journal/checklist data) for clean ML export
+    mlParameters: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

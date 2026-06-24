@@ -3,7 +3,8 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { ICT_TAGS } from '../utils/ictTags';
-import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon, XMarkIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import MLParametersPanel from '../components/MLParametersPanel';
+import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon, XMarkIcon, BookOpenIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const SESSIONS = ['Asia', 'London', 'New York', 'London-NY Overlap'];
@@ -472,7 +473,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
     sweepType2: initial.sweepType2 ?? '',
     sweepStyle: initial.sweepStyle ?? '',
     maxPts: initial.maxPts ?? '',
-  } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [], newsEntries: [] });
+    mlParameters: initial.mlParameters ?? {},
+  } : { ...BLANK_SETUP, setupRules: baseRules, chartImages: [], newsEntries: [], mlParameters: {} });
   const [activeOpp, setActiveOpp] = useState(0);
   const [activeScenarios, setActiveScenarios] = useState({}); // { ruleIndex: scenarioIndex }
   const [activeSubScenarios, setActiveSubScenarios] = useState({}); // { 'ri-si': scenarioIndex }
@@ -777,6 +779,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         sweepType2: form.sweepType2 || '',
         sweepStyle: form.sweepStyle || '',
         maxPts: form.maxPts !== '' ? Number(form.maxPts) : undefined,
+        // ML Parameters — validated server-side
+        mlParameters: form.mlParameters || {},
       };
       let result;
       if (initial?._id) {
@@ -786,7 +790,11 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       }
       onSave(result.data.setup);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Save failed');
+      toast.error(
+        err.response?.data?.details?.length
+          ? err.response.data.details.join('\n')
+          : (err.response?.data?.error || 'Save failed')
+      );
     } finally { setSaving(false); }
   };
 
@@ -1723,6 +1731,15 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         </div>
       )}
 
+      {/* ML Parameters Panel — Registry-driven, validated at save time */}
+      <MLParametersPanel
+        values={form.mlParameters}
+        onChange={(mlKey, value) => setForm(f => ({
+          ...f,
+          mlParameters: { ...f.mlParameters, [mlKey]: value },
+        }))}
+      />
+
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg">
           {saving ? 'Saving…' : initial ? 'Save Changes' : 'Add Setup'}
@@ -2638,7 +2655,7 @@ function MasterRulesCard({ topic, onEdit }) {
 // ════════════════════════════════════════════════════════════════════════════
 // TopicSharePanel — topic-level share system
 // ════════════════════════════════════════════════════════════════════════════
-function TopicSharePanel({ topic, onTopicUpdate }) {
+function TopicSharePanel({ topic, onTopicUpdate, onExport }) {
   const [open, setOpen]           = useState(false);
   const [loading, setLoading]     = useState(false);
   const [copiedField, setCopied]  = useState(null); // 'url' | 'key' | 'endpoint'
@@ -2709,15 +2726,26 @@ function TopicSharePanel({ topic, onTopicUpdate }) {
         <div className="p-5 border-t border-gray-800 space-y-4">
           {!isPublic ? (
             /* ── State A: Private ── */
-            <div className="text-center py-2">
-              <p className="text-sm text-gray-400 mb-3">Share your full study catalog with others or external tools via a stable link and API key.</p>
-              <button
-                onClick={handleShare}
-                disabled={loading}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
-              >
-                {loading ? 'Sharing…' : 'Share Study'}
-              </button>
+            <div className="text-center py-2 space-y-4">
+              <div>
+                <p className="text-sm text-gray-400 mb-3">Share your full study catalog with others or external tools via a stable link and API key.</p>
+                <button
+                  onClick={handleShare}
+                  disabled={loading}
+                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+                >
+                  {loading ? 'Sharing…' : 'Share Study'}
+                </button>
+              </div>
+              <div className="border-t border-gray-800 pt-4 text-center">
+                <p className="text-sm text-gray-400 mb-3">Or export your data as a CSV file to use locally.</p>
+                <button
+                  onClick={onExport}
+                  className="inline-flex items-center gap-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 px-5 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" /> Export CSV
+                </button>
+              </div>
             </div>
           ) : (
             /* ── State B: Public ── */
@@ -2757,7 +2785,13 @@ function TopicSharePanel({ topic, onTopicUpdate }) {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
+                <button
+                  onClick={onExport}
+                  className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" /> Export CSV
+                </button>
                 <button
                   onClick={handleRegenerateKey}
                   disabled={loading}
@@ -2976,6 +3010,22 @@ export default function StudyCompanionPage() {
     setShowSetupForm(true);
   };
 
+  const handleExport = async () => {
+    if (!activeTopic) return;
+    try {
+      const res = await api.get(`/study/export?topicId=${activeTopic._id}`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `study-export-${activeTopic.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      toast.error('Export failed');
+    }
+  };
+
   return (
     <div className="-m-3 md:-m-6 flex h-full">
 
@@ -3100,6 +3150,7 @@ export default function StudyCompanionPage() {
             {/* Topic share panel */}
             <TopicSharePanel
               topic={activeTopic}
+              onExport={handleExport}
               onTopicUpdate={(updated) => {
                 setActiveTopic(updated);
                 setTopics(prev => prev.map(t => t._id === updated._id ? { ...t, ...updated } : t));

@@ -3,6 +3,8 @@ const auth = require('../middleware/auth');
 const StudyTopic = require('../models/StudyTopic');
 const StudySetup = require('../models/StudySetup');
 const RuleLibrary = require('../models/RuleLibrary');
+const { RULE_DEFINITIONS, CURRENT_SCHEMA_VERSION, getAllMlKeys } = require('../shared/rules-registry');
+const { validateAllParameters } = require('../shared/validate-parameters');
 
 // ── Helper: generate all k-combinations of an array ──────────────────────────
 function combinations(arr, k) {
@@ -276,6 +278,13 @@ router.post('/setups', auth, async (req, res) => {
     body.totalRulesCount = totalRulesCount;
     // Derive rMultiple per opportunity
     body.opportunities = deriveOpportunityFields(body.opportunities);
+    // ── Rule Registry: validate & normalize ML parameters at write time ──
+    if (body.mlParameters && Object.keys(body.mlParameters).length > 0) {
+      const { valid, normalized, errors } = validateAllParameters(body.mlParameters);
+      if (!valid) return res.status(400).json({ error: 'ML parameter validation failed', details: errors });
+      body.mlParameters = normalized;
+      body.schemaVersion = CURRENT_SCHEMA_VERSION;
+    }
     const setup = await StudySetup.create(body);
     res.status(201).json({ setup });
   } catch (err) {
@@ -297,6 +306,13 @@ router.put('/setups/:id', auth, async (req, res) => {
     body.totalRulesCount = totalRulesCount;
     // Derive rMultiple per opportunity
     body.opportunities = deriveOpportunityFields(body.opportunities);
+    // ── Rule Registry: validate & normalize ML parameters at write time ──
+    if (body.mlParameters && Object.keys(body.mlParameters).length > 0) {
+      const { valid, normalized, errors } = validateAllParameters(body.mlParameters);
+      if (!valid) return res.status(400).json({ error: 'ML parameter validation failed', details: errors });
+      body.mlParameters = normalized;
+      body.schemaVersion = CURRENT_SCHEMA_VERSION;
+    }
 
     Object.assign(setup, body);
     await setup.save(); // triggers pre-save hook → dayOfWeek auto-derived from date
@@ -711,6 +727,143 @@ router.post('/topics/:topicId/regenerate-key', auth, async (req, res) => {
     topic.apiKey = crypto.randomBytes(32).toString('hex');
     await topic.save();
     res.json({ apiKey: topic.apiKey });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// RULE REGISTRY — public endpoint (drives the client ML Parameters panel)
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /api/study/rules-registry
+router.get('/rules-registry', auth, async (_req, res) => {
+  res.json({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    rules: RULE_DEFINITIONS,
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// CSV EXPORT — Registry-driven with legacy fallback
+// ════════════════════════════════════════════════════════════════════════════
+
+// Legacy helper: extract a best-effort value from a setupRule for old data
+// Kept for backward compatibility with setups created before mlParameters
+function extractLegacyRuleValue(r) {
+  if (!r || !r.checked) return null;
+
+  let note = '';
+  let time = '';
+  if (r.scenarios && r.scenarios.length > 0) {
+    const obs = r.scenarios[0].observations || [];
+    note = obs.map(o => o.note).filter(Boolean).join(' | ');
+    time = obs.map(o => o.time).filter(Boolean).join(' | ');
+  } else if (r.observations && r.observations.length > 0) {
+    note = r.observations.map(o => o.note).filter(Boolean).join(' | ');
+    time = r.observations.map(o => o.time).filter(Boolean).join(' | ');
+  }
+
+  const checkedSubs = (r.subs || []).filter(sub => sub && sub.checked).map(sub => sub.text);
+  const ruleTextLower = (r.text || '').toLowerCase();
+
+  if (ruleTextLower.includes('time') && time) return time;
+
+  if (note) {
+    const match = note.match(/[-+]?[0-9]*\.?[0-9]+/);
+    if (match) {
+      const num = Number(match[0]);
+      if (!isNaN(num)) return num;
+    }
+    return note;
+  }
+
+  if (checkedSubs.length > 0) {
+    const subText = checkedSubs[0];
+    const signMatch = subText.match(/\(([+-]\d+(?:\.\d+)?)\)/);
+    if (signMatch) return Number(signMatch[1]);
+    const leadingFloat = subText.match(/^([-+]?[0-9]*\.?[0-9]+)/);
+    if (leadingFloat) return Number(leadingFloat[1]);
+    return subText;
+  }
+
+  return 1;
+}
+
+// GET /api/study/export
+router.get('/export', auth, async (req, res) => {
+  try {
+    const { stringify } = require('csv-stringify/sync');
+    const filter = { userId: req.userId };
+    if (req.query.topicId) filter.topicId = req.query.topicId;
+
+    const setups = await StudySetup.find(filter).sort({ createdAt: -1 }).populate('topicId', 'name').lean();
+
+    // Registry-driven ML key columns
+    const mlKeys = getAllMlKeys();
+
+    // Also collect legacy rule texts for backward compat (setups without mlParameters)
+    const allRuleTexts = new Set();
+    setups.forEach(s => {
+      if (s.mlParameters && Object.keys(s.mlParameters).length > 0) return; // skip — uses registry
+      (s.setupRules || []).forEach(r => {
+        if (r && typeof r === 'object' && r.text) allRuleTexts.add(r.text.trim());
+        else if (typeof r === 'string' && r.trim()) allRuleTexts.add(r.trim());
+      });
+    });
+    const legacyRules = Array.from(allRuleTexts);
+
+    const records = setups.map(s => {
+      const opp = s.opportunities?.[0] || {};
+
+      const record = {
+        Setup_ID: s._id.toString(),
+        Topic_Name: s.topicId?.name || 'Unknown',
+        Date: s.date ? new Date(s.date).toISOString().split('T')[0] : '',
+        Schema_Version: s.schemaVersion || 0,
+        Session: s.session || '',
+        Direction: s.direction || '',
+        Outcome: opp.outcome || s.outcome || '',
+        Bias: opp.bias || s.bias || '',
+        Time_of_Trade: opp.timeOfTrade || s.timeOfTrade || '',
+        Max_Run: opp.maxRun ?? s.maxRun ?? '',
+        Confluences: (opp.confluences || s.confluences || []).join(', '),
+        Sweep_Type: s.sweepType || '',
+        Target_Liquidity: s.targetLiquidity || '',
+        PD_Array: s.pdArray || '',
+        Clarity_Score: s.clarityScore ?? '',
+        Completion_Rate: s.completionRate ?? '',
+        Fired_Rules_Count: s.firedRulesCount ?? '',
+      };
+
+      // ── Registry-driven ML columns (clean, validated) ──────────────────
+      const hasMLParams = s.mlParameters && Object.keys(s.mlParameters).length > 0;
+      mlKeys.forEach(key => {
+        record[key] = hasMLParams ? (s.mlParameters[key] ?? '') : '';
+      });
+
+      // ── Legacy rule columns (backward compat for old setups) ──────────
+      if (!hasMLParams) {
+        const sRules = s.setupRules || [];
+        legacyRules.forEach(ruleText => {
+          const matchingRule = sRules.find(r => {
+            if (r && typeof r === 'object' && r.text) return r.text.trim() === ruleText;
+            if (typeof r === 'string') return r.trim() === ruleText;
+            return false;
+          });
+          const val = extractLegacyRuleValue(matchingRule);
+          record[ruleText] = val !== null ? val : '';
+        });
+      }
+
+      return record;
+    });
+
+    const csvString = stringify(records, { header: true });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="study-export.csv"');
+    res.status(200).send(csvString);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

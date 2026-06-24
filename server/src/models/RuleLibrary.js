@@ -24,6 +24,10 @@ const ruleLibrarySchema = new mongoose.Schema(
     },
 
     tags: [{ type: String }],
+
+    // ML Registry linkage — links a library rule to an ML parameter definition
+    // When set, importing this rule into a topic auto-includes the ML parameter input
+    mlRegistryId: { type: String, default: null },
   },
   { timestamps: true }
 );
