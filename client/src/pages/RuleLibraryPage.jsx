@@ -3,7 +3,7 @@ import api from '../utils/api';
 import toast from 'react-hot-toast';
 import {
   PlusIcon, PencilIcon, TrashIcon, XMarkIcon, CheckIcon,
-  BookOpenIcon, ChevronDownIcon, ChevronUpIcon,
+  BookOpenIcon, ChevronDownIcon, ChevronUpIcon, ArrowUpTrayIcon,
 } from '@heroicons/react/24/outline';
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -294,6 +294,178 @@ function RuleCard({ rule, onUpdated, onDeleted }) {
   );
 }
 
+// ── BulkImportPanel ───────────────────────────────────────────────────────────
+const SAMPLE_JSON = JSON.stringify([
+  {
+    ruleId: 'org-direction',
+    title: 'ORG Gap Direction',
+    description: 'Is the opening range gap bullish or bearish?',
+    ruleType: 'conditional',
+    defaultBranchType: 'fork',
+    defaultBranchLabels: ['Bullish (+1)', 'Bearish (-1)'],
+    tags: ['org', 'direction'],
+  },
+  {
+    ruleId: 'displacement-check',
+    title: 'Displacement Validation',
+    description: 'Was there clean displacement through the FVG?',
+    ruleType: 'conditional',
+    defaultBranchType: 'fork',
+    defaultBranchLabels: ['Clean', 'Chopped'],
+    tags: ['displacement', 'entry'],
+  },
+], null, 2);
+
+function BulkImportPanel({ onImported }) {
+  const [jsonText, setJsonText] = useState('');
+  const [parseError, setParseError] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+
+  // Live-validate JSON as user types
+  const parsed = (() => {
+    if (!jsonText.trim()) return null;
+    try {
+      const data = JSON.parse(jsonText);
+      if (!Array.isArray(data)) return { error: 'JSON must be an array of rule objects' };
+      return { rules: data, count: data.length };
+    } catch (e) {
+      return { error: e.message };
+    }
+  })();
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setJsonText(ev.target.result);
+      setResult(null);
+      setParseError(null);
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // reset so same file can be re-selected
+  };
+
+  const handleImport = async () => {
+    if (!parsed || parsed.error) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const { data } = await api.post('/rules/library/bulk', { rules: parsed.rules });
+      setResult(data);
+      if (data.summary.created > 0) {
+        toast.success(`${data.summary.created} rule${data.summary.created !== 1 ? 's' : ''} imported`);
+        onImported();
+      } else if (data.summary.skipped === data.summary.submitted) {
+        toast('All rules already exist — nothing new imported', { icon: 'ℹ️' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Bulk import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="bg-gray-900 border border-teal-700/60 rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ArrowUpTrayIcon className="w-4 h-4 text-teal-400" />
+          <p className="text-sm font-semibold text-teal-300">Bulk Import Rules</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setJsonText(SAMPLE_JSON); setResult(null); }}
+          className="text-[10px] text-gray-500 hover:text-teal-400 bg-gray-800 px-2 py-1 rounded transition-colors"
+        >
+          Load template
+        </button>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        Paste a JSON array of rule objects below, or upload a <code className="text-gray-400">.json</code> file.
+        Each object needs at minimum <code className="text-gray-400">ruleId</code> and <code className="text-gray-400">title</code>.
+        Duplicates are automatically skipped.
+      </p>
+
+      <textarea
+        className={`${inputCls} font-mono text-xs !leading-relaxed resize-y`}
+        rows={10}
+        placeholder={'[\n  { "ruleId": "my-rule", "title": "My Rule", "description": "...", "tags": ["tag"] },\n  ...\n]'}
+        value={jsonText}
+        onChange={(e) => { setJsonText(e.target.value); setResult(null); }}
+        spellCheck={false}
+      />
+
+      {/* Validation status */}
+      {jsonText.trim() && (
+        <div className={`text-xs px-3 py-2 rounded-lg ${
+          parsed?.error
+            ? 'bg-red-900/30 border border-red-700/40 text-red-400'
+            : 'bg-emerald-900/20 border border-emerald-700/40 text-emerald-400'
+        }`}>
+          {parsed?.error
+            ? <>⚠ {parsed.error}</>
+            : <>✓ Valid JSON — {parsed.count} rule{parsed.count !== 1 ? 's' : ''} ready to import</>
+          }
+        </div>
+      )}
+
+      {/* Import result summary */}
+      {result && (
+        <div className="bg-gray-800/60 border border-gray-700/50 rounded-lg p-3 space-y-2 text-xs">
+          <div className="flex gap-4 flex-wrap">
+            <span className="text-emerald-400">✓ {result.summary.created} created</span>
+            {result.summary.skipped > 0 && <span className="text-yellow-400">⊘ {result.summary.skipped} skipped</span>}
+            {result.summary.failed > 0 && <span className="text-red-400">✗ {result.summary.failed} failed</span>}
+          </div>
+          {result.skipped.length > 0 && (
+            <details className="text-gray-500">
+              <summary className="cursor-pointer hover:text-gray-300">Skipped ({result.skipped.length})</summary>
+              <ul className="mt-1 space-y-0.5 ml-3">
+                {result.skipped.map((s, i) => (
+                  <li key={i} className="text-yellow-500/70">
+                    <code>{s.ruleId}</code> — {s.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {result.errors.length > 0 && (
+            <details className="text-gray-500" open>
+              <summary className="cursor-pointer hover:text-gray-300">Errors ({result.errors.length})</summary>
+              <ul className="mt-1 space-y-0.5 ml-3">
+                {result.errors.map((e, i) => (
+                  <li key={i} className="text-red-400/70">
+                    <code>{e.rule}</code> — {e.error}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={importing || !parsed || !!parsed.error}
+          className={`${btnPrimary} ${(!parsed || parsed.error) ? 'opacity-40 cursor-not-allowed' : ''}`}
+        >
+          {importing ? 'Importing…' : 'Import Rules'}
+        </button>
+        <label className={`${btnSecondary} cursor-pointer`}>
+          <ArrowUpTrayIcon className="w-4 h-4" />
+          Upload .json
+          <input type="file" accept=".json,application/json" onChange={handleFile} className="hidden" />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // RuleLibraryPage
 // ════════════════════════════════════════════════════════════════════════════
@@ -301,6 +473,7 @@ export default function RuleLibraryPage() {
   const [rules, setRules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -347,9 +520,13 @@ export default function RuleLibraryPage() {
             <p className="text-xs text-gray-500 mt-0.5">Reusable, globally-tracked rules for every study topic</p>
           </div>
         </div>
-        <button className={btnPrimary} onClick={() => setShowCreate((v) => !v)}>
+        <button className={btnPrimary} onClick={() => { setShowCreate((v) => !v); if (!showCreate) setShowBulk(false); }}>
           {showCreate ? <XMarkIcon className="w-4 h-4" /> : <PlusIcon className="w-4 h-4" />}
           {showCreate ? 'Cancel' : 'New Rule'}
+        </button>
+        <button className={btnSecondary} onClick={() => { setShowBulk((v) => !v); if (!showBulk) setShowCreate(false); }}>
+          <ArrowUpTrayIcon className="w-4 h-4" />
+          {showBulk ? 'Close' : 'Bulk Import'}
         </button>
       </div>
 
@@ -359,6 +536,18 @@ export default function RuleLibraryPage() {
           <p className="text-sm font-semibold text-indigo-300 mb-3">Create New Rule</p>
           <RuleForm onSubmit={handleCreate} onCancel={() => setShowCreate(false)} submitLabel="Create Rule" />
         </div>
+      )}
+
+      {/* Bulk import panel */}
+      {showBulk && (
+        <BulkImportPanel
+          onImported={() => {
+            // Re-fetch the full list after bulk import
+            api.get('/rules/library')
+              .then(({ data }) => setRules(data.rules || []))
+              .catch(() => {});
+          }}
+        />
       )}
 
       {/* Search */}

@@ -109,4 +109,84 @@ router.delete('/library/:ruleId', async (req, res) => {
   }
 });
 
+// ── POST /api/rules/library/bulk ───────────────────────────────────────────
+// Bulk-create rules from a JSON array. Skips duplicates, reports per-rule errors.
+router.post('/library/bulk', async (req, res) => {
+  try {
+    const { rules } = req.body;
+    if (!Array.isArray(rules) || rules.length === 0) {
+      return res.status(400).json({ error: 'Request body must contain a non-empty "rules" array' });
+    }
+    if (rules.length > 200) {
+      return res.status(400).json({ error: 'Maximum 200 rules per bulk import' });
+    }
+
+    const created = [];
+    const skipped = [];
+    const errors = [];
+
+    for (let i = 0; i < rules.length; i++) {
+      const r = rules[i];
+      const label = r.ruleId || r.title || `rule[${i}]`;
+
+      // Validate required fields
+      if (!r.ruleId?.trim()) {
+        errors.push({ index: i, rule: label, error: 'ruleId is required' });
+        continue;
+      }
+      if (!r.title?.trim()) {
+        errors.push({ index: i, rule: label, error: 'title is required' });
+        continue;
+      }
+
+      const ruleId = r.ruleId.trim().toLowerCase();
+
+      // Validate ruleId format
+      if (!/^[a-z0-9-]+$/.test(ruleId)) {
+        errors.push({ index: i, rule: label, error: 'ruleId must contain only lowercase letters, numbers, and hyphens' });
+        continue;
+      }
+
+      // Check for duplicates (against DB + already-created in this batch)
+      const existing = await RuleLibrary.findOne({ userId: req.userId, ruleId });
+      if (existing || created.some(c => c.ruleId === ruleId)) {
+        skipped.push({ index: i, ruleId, title: r.title, reason: 'Already exists' });
+        continue;
+      }
+
+      try {
+        const rule = await RuleLibrary.create({
+          userId: req.userId,
+          ruleId,
+          title: r.title.trim(),
+          description: r.description || '',
+          defaultBranchType: r.defaultBranchType || 'none',
+          defaultBranchLabels: r.defaultBranchLabels || [],
+          ruleType: r.ruleType || 'conditional',
+          macroTime: (r.ruleType === 'macro' && r.macroTime) ? r.macroTime : null,
+          tags: r.tags || [],
+          mlRegistryId: r.mlRegistryId || null,
+        });
+        created.push(rule);
+      } catch (err) {
+        errors.push({ index: i, rule: label, error: err.message });
+      }
+    }
+
+    res.status(201).json({
+      summary: {
+        submitted: rules.length,
+        created: created.length,
+        skipped: skipped.length,
+        failed: errors.length,
+      },
+      created: created.map(r => ({ ruleId: r.ruleId, title: r.title })),
+      skipped,
+      errors,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
