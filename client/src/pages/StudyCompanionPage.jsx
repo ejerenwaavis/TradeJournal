@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { Link } from 'react-router-dom';
 import { ICT_TAGS } from '../utils/ictTags';
 import MLParametersPanel from '../components/MLParametersPanel';
-import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon, XMarkIcon, BookOpenIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, PencilIcon, ChevronDownIcon, ChevronUpIcon, Bars3Icon, LightBulbIcon, PhotoIcon, DocumentDuplicateIcon, LinkIcon, XMarkIcon, BookOpenIcon, ArrowDownTrayIcon, CheckIcon } from '@heroicons/react/24/outline';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const SESSIONS = ['Asia', 'London', 'New York', 'London-NY Overlap'];
@@ -384,6 +384,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         const branchLabels = rObj.branchLabels  || [];
         const branches = branchType === 'none' ? [] :
           branchType === 'single' ? [{ label: branchLabels[0] || 'Branch A', fired: false, timestamp: '', note: '' }] :
+          branchType === 'select' ? branchLabels.map(l => ({ label: l, fired: false, timestamp: '', note: '' })) :
           [
             { label: branchLabels[0] || 'Branch A', fired: false, timestamp: '', note: '' },
             { label: branchLabels[1] || 'Branch B', fired: false, timestamp: '', note: '' },
@@ -396,6 +397,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           scenarios: defaultScenarios,
           ruleId: rObj.ruleId || null,
           ruleType: rObj.ruleType || 'conditional',
+          inputType: rObj.inputType || '',
+          inputValue: '',
           macroTime: rObj.macroTime || null,
           branchType,
           branchLabels,
@@ -441,6 +444,8 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
             scenarios,
             ruleId: r.ruleId || null,
             ruleType: r.ruleType || 'conditional',
+            inputType: r.inputType || '',
+            inputValue: r.inputValue || '',
             macroTime: r.macroTime || null,
             branchType: r.branchType || 'none',
             branchLabels: r.branchLabels || [],
@@ -904,16 +909,35 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                   return (
                   <div key={i} className={`border rounded-xl p-3 transition-colors ${rule.checked ? 'border-emerald-800 bg-emerald-950/20' : 'border-gray-700 bg-gray-800/40'}`}>
                     <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={rule.checked || false}
-                        onChange={(e) => updateRule(i, { checked: e.target.checked })}
-                        className="mt-1 w-4 h-4 cursor-pointer accent-emerald-500 shrink-0"
-                      />
+                      {rule.ruleType === 'input' ? (
+                        <div className="mt-1 w-4 h-4 shrink-0 flex items-center justify-center">
+                          {rule.inputValue ? <CheckIcon className="w-4 h-4 text-emerald-500" /> : <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />}
+                        </div>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={rule.checked || false}
+                          onChange={(e) => updateRule(i, { checked: e.target.checked })}
+                          className="mt-1 w-4 h-4 cursor-pointer accent-emerald-500 shrink-0"
+                        />
+                      )}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-1.5">
-                          <span className="text-xs text-gray-600 shrink-0 mt-0.5">{idx + 1}.</span>
-                          <p className={`text-sm leading-snug ${rule.checked ? 'fired-rule-text' : 'text-gray-300'}`}>{rule.text}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-3">
+                          <div className="flex items-start gap-1.5 flex-1">
+                            <span className="text-xs text-gray-600 shrink-0 mt-0.5">{idx + 1}.</span>
+                            <p className={`text-sm leading-snug ${(rule.ruleType === 'input' && rule.inputValue) || rule.checked ? 'fired-rule-text' : 'text-gray-300'}`}>{rule.text}</p>
+                          </div>
+                          {rule.ruleType === 'input' && (
+                            <div className="sm:w-32 shrink-0 mt-2 sm:mt-0">
+                              <input
+                                type={rule.inputType === 'time' ? 'time' : rule.inputType === 'number' ? 'number' : 'text'}
+                                value={rule.inputValue || ''}
+                                onChange={(e) => updateRule(i, { inputValue: e.target.value, checked: !!e.target.value })}
+                                placeholder={rule.inputType === 'time' ? '00:00' : rule.inputType === 'number' ? '0' : 'Value'}
+                                className="w-full bg-gray-900 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                          )}
                         </div>
                         {(rule.subs || []).filter(sub => typeof sub === 'string' ? sub : sub?.text).map((sub, j) => {
                           const subObj = typeof sub === 'string' ? { text: sub, scenarios: [{ name: 'Default', observations: [{ time: '', note: '' }] }] } : sub;
@@ -1143,6 +1167,39 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
                             ))}
                           </div>
                         )}
+
+                        {/* Select dropdown branches */}
+                        {rule.branchType === 'select' && (() => {
+                          const activeIndex = (rule.branches || []).findIndex(b => b.fired);
+                          const neither = rule.neitherFired || false;
+                          const onChangeSelect = (e) => {
+                            const val = e.target.value;
+                            if (val === 'neither') {
+                              updateRule(i, { branches: rule.branches.map(b => ({ ...b, fired: false })), neitherFired: true });
+                            } else if (val === '') {
+                              updateRule(i, { branches: rule.branches.map(b => ({ ...b, fired: false })), neitherFired: false });
+                            } else {
+                              const bi = parseInt(val, 10);
+                              updateRule(i, { branches: rule.branches.map((b, idx) => ({ ...b, fired: idx === bi })), neitherFired: false });
+                            }
+                          };
+                          return (
+                            <div className="space-y-2">
+                              <select
+                                value={neither ? 'neither' : (activeIndex >= 0 ? activeIndex : '')}
+                                onChange={onChangeSelect}
+                                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                              >
+                                <option value="">— Select Outcome —</option>
+                                {(rule.branches || []).map((b, bi) => (
+                                  <option key={bi} value={bi}>{b.label}</option>
+                                ))}
+                                <option value="neither">Neither / Other</option>
+                              </select>
+                              {neither && <p className="text-[10px] text-amber-500/70 pl-0.5 italic">Neither / Other branch fired.</p>}
+                            </div>
+                          );
+                        })()}
 
                         {/* Fork branches (A/B) */}
                         {rule.branchType === 'fork' && (() => {
