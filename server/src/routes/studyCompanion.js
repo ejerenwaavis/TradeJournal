@@ -151,6 +151,7 @@ router.post('/topics/:id/rules/import', auth, async (req, res) => {
       ruleId: libRule.ruleId,
       isFromLibrary: true,
       ruleType: libRule.ruleType,
+      inputType: libRule.inputType || '',
       macroTime: libRule.macroTime || null,
       branchType: libRule.defaultBranchType,
       branchLabels: [...(libRule.defaultBranchLabels || [])],

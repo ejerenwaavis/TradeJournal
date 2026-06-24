@@ -2251,6 +2251,7 @@ function TopicModal({ initial, onSave, onClose }) {
             ruleId: rObj.ruleId ?? null,
             isFromLibrary: rObj.isFromLibrary ?? false,
             ruleType: rObj.ruleType ?? 'conditional',
+            inputType: rObj.inputType ?? '',
             macroTime: rObj.macroTime ?? null,
             branchType: rObj.branchType ?? 'none',
             branchLabels: rObj.branchLabels ?? [],
@@ -2290,6 +2291,7 @@ function TopicModal({ initial, onSave, onClose }) {
       ruleId: libRule.ruleId,
       isFromLibrary: true,
       ruleType: libRule.ruleType,
+      inputType: libRule.inputType || '',
       macroTime: libRule.macroTime || null,
       branchType: libRule.defaultBranchType || 'none',
       branchLabels: [...(libRule.defaultBranchLabels || [])],
@@ -2434,8 +2436,29 @@ function TopicModal({ initial, onSave, onClose }) {
                     >
                       <option value="conditional">Conditional</option>
                       <option value="macro">Macro</option>
+                      <option value="input">Input</option>
                     </select>
                   </div>
+                  {/* Input Type (only if input) */}
+                  {(rule.ruleType === 'input') && (
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-0.5">Input Type</label>
+                      <select
+                        value={rule.inputType || ''}
+                        onChange={(e) => {
+                          const mr = [...(form.masterRules || [])];
+                          mr[i] = { ...mr[i], inputType: e.target.value };
+                          setForm(f => ({ ...f, masterRules: mr }));
+                        }}
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="">— Select —</option>
+                        <option value="number">Number</option>
+                        <option value="text">Text</option>
+                        <option value="time">Time</option>
+                      </select>
+                    </div>
+                  )}
                   {/* Macro Time (only if macro) */}
                   {(rule.ruleType === 'macro') && (
                     <div>
@@ -2466,6 +2489,7 @@ function TopicModal({ initial, onSave, onClose }) {
                         if (bt === 'none') labels = [];
                         else if (bt === 'single' && oldLabels.length === 0) labels = ['Confirmed'];
                         else if (bt === 'fork' && oldLabels.length < 2) labels = [oldLabels[0] || 'Branch A', oldLabels[1] || 'Branch B'];
+                        else if (bt === 'select' && oldLabels.length === 0) labels = ['Option 1'];
                         mr[i] = { ...mr[i], branchType: bt, branchLabels: labels };
                         setForm(f => ({ ...f, masterRules: mr }));
                       }}
@@ -2474,6 +2498,7 @@ function TopicModal({ initial, onSave, onClose }) {
                       <option value="none">None</option>
                       <option value="single">Single</option>
                       <option value="fork">Fork (A/B)</option>
+                      <option value="select">Select</option>
                     </select>
                   </div>
                   {/* Branch Labels (conditional on branchType) */}
@@ -2526,6 +2551,45 @@ function TopicModal({ initial, onSave, onClose }) {
                         />
                       </div>
                     </>
+                  )}
+                  {rule.branchType === 'select' && (
+                    <div className="col-span-2 sm:col-span-4 mt-2">
+                      <label className="block text-[10px] text-gray-500 mb-1">Dropdown Options</label>
+                      <div className="space-y-1">
+                        {(rule.branchLabels || []).map((l, li) => (
+                          <div key={li} className="flex gap-2 items-center">
+                            <span className="text-[10px] text-gray-600 w-4 text-right shrink-0">{li + 1}.</span>
+                            <input
+                              type="text"
+                              value={l}
+                              onChange={(e) => {
+                                const mr = [...(form.masterRules || [])];
+                                const lbls = [...(mr[i].branchLabels || [])];
+                                lbls[li] = e.target.value;
+                                mr[i] = { ...mr[i], branchLabels: lbls };
+                                setForm(f => ({ ...f, masterRules: mr }));
+                              }}
+                              placeholder={`Option ${li + 1}`}
+                              className="flex-1 bg-gray-800 border border-gray-700 rounded-md px-2 py-1 text-xs text-gray-300 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                            />
+                            {(rule.branchLabels || []).length > 2 && (
+                              <button type="button" onClick={() => {
+                                const mr = [...(form.masterRules || [])];
+                                mr[i] = { ...mr[i], branchLabels: (mr[i].branchLabels || []).filter((_, j) => j !== li) };
+                                setForm(f => ({ ...f, masterRules: mr }));
+                              }} className="text-gray-600 hover:text-rose-400 shrink-0 text-xs px-1">✕</button>
+                            )}
+                          </div>
+                        ))}
+                        {(rule.branchLabels || []).length < 20 && (
+                          <button type="button" onClick={() => {
+                            const mr = [...(form.masterRules || [])];
+                            mr[i] = { ...mr[i], branchLabels: [...(mr[i].branchLabels || []), ''] };
+                            setForm(f => ({ ...f, masterRules: mr }));
+                          }} className="text-[10px] text-teal-400 hover:underline mt-1 pl-6">+ Add option</button>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
