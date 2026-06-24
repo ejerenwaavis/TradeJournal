@@ -7,8 +7,9 @@ import {
 } from '@heroicons/react/24/outline';
 
 // ── constants ─────────────────────────────────────────────────────────────────
-const BRANCH_TYPES = ['none', 'single', 'fork'];
-const RULE_TYPES   = ['conditional', 'macro'];
+const BRANCH_TYPES = ['none', 'single', 'fork', 'select'];
+const RULE_TYPES   = ['conditional', 'macro', 'input'];
+const INPUT_TYPES  = ['number', 'text', 'time'];
 
 const inputCls = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder-gray-500';
 const selectCls = `${inputCls} cursor-pointer`;
@@ -18,7 +19,7 @@ const btnSecondary = 'flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg
 // ── BLANK form state ──────────────────────────────────────────────────────────
 const BLANK = {
   ruleId: '', title: '', description: '',
-  ruleType: 'conditional', macroTime: '',
+  ruleType: 'conditional', inputType: '', macroTime: '',
   defaultBranchType: 'none', defaultBranchLabels: ['', ''],
   tags: [],
 };
@@ -65,6 +66,11 @@ function BranchTypeFields({ form, onChange }) {
     next[i] = v;
     onChange({ ...form, defaultBranchLabels: next });
   };
+  const addLabel = () => onChange({ ...form, defaultBranchLabels: [...labels, ''] });
+  const removeLabel = (i) => {
+    const next = labels.filter((_, j) => j !== i);
+    onChange({ ...form, defaultBranchLabels: next });
+  };
   return (
     <div className="space-y-3">
       <div>
@@ -77,6 +83,7 @@ function BranchTypeFields({ form, onChange }) {
           <option value="none">None</option>
           <option value="single">Single</option>
           <option value="fork">Fork (A/B)</option>
+          <option value="select">Select (dropdown)</option>
         </select>
       </div>
       {defaultBranchType === 'single' && (
@@ -95,6 +102,32 @@ function BranchTypeFields({ form, onChange }) {
             <label className="block text-xs text-gray-400 mb-1">Branch B Label</label>
             <input className={inputCls} placeholder="e.g. Continuation" value={labels[1]} onChange={(e) => setLabel(1, e.target.value)} />
           </div>
+        </div>
+      )}
+      {defaultBranchType === 'select' && (
+        <div className="space-y-2">
+          <label className="block text-xs text-gray-400 mb-1">Dropdown Options</label>
+          {labels.map((l, i) => (
+            <div key={i} className="flex gap-2 items-center">
+              <span className="text-[10px] text-gray-600 w-5 text-right shrink-0">{i + 1}.</span>
+              <input
+                className={inputCls}
+                placeholder={`Option ${i + 1}`}
+                value={l}
+                onChange={(e) => setLabel(i, e.target.value)}
+              />
+              {labels.length > 2 && (
+                <button type="button" onClick={() => removeLabel(i)} className="text-gray-600 hover:text-rose-400 transition-colors text-xs px-1">
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {labels.length < 20 && (
+            <button type="button" onClick={addLabel} className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
+              + Add option
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -154,12 +187,24 @@ function RuleForm({ initial, onSubmit, onCancel, submitLabel = 'Save Rule' }) {
           <select className={selectCls} value={form.ruleType} onChange={set('ruleType')}>
             <option value="conditional">Conditional</option>
             <option value="macro">Macro (clock-based)</option>
+            <option value="input">Input (value entry)</option>
           </select>
         </div>
         {form.ruleType === 'macro' && (
           <div>
             <label className="block text-xs text-gray-400 mb-1">Macro Time <span className="text-rose-400">*</span></label>
             <input className={inputCls} placeholder="e.g. 10:30" value={form.macroTime || ''} onChange={set('macroTime')} />
+          </div>
+        )}
+        {form.ruleType === 'input' && (
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Input Type <span className="text-rose-400">*</span></label>
+            <select className={selectCls} value={form.inputType || ''} onChange={set('inputType')}>
+              <option value="">— Select —</option>
+              <option value="number">Number (integer/decimal)</option>
+              <option value="text">Text (free-form)</option>
+              <option value="time">Time (HH:MM)</option>
+            </select>
           </div>
         )}
       </div>
@@ -184,7 +229,12 @@ function RuleForm({ initial, onSubmit, onCancel, submitLabel = 'Save Rule' }) {
 }
 
 // ── branchBadge ───────────────────────────────────────────────────────────────
-const branchBadgeColor = { none: 'bg-gray-700 text-gray-400', single: 'bg-teal-900/60 text-teal-300 border-teal-700', fork: 'bg-purple-900/60 text-purple-300 border-purple-700' };
+const branchBadgeColor = {
+  none: 'bg-gray-700 text-gray-400',
+  single: 'bg-teal-900/60 text-teal-300 border-teal-700',
+  fork: 'bg-purple-900/60 text-purple-300 border-purple-700',
+  select: 'bg-sky-900/60 text-sky-300 border-sky-700',
+};
 
 // ── RuleCard ──────────────────────────────────────────────────────────────────
 function RuleCard({ rule, onUpdated, onDeleted }) {
@@ -222,11 +272,17 @@ function RuleCard({ rule, onUpdated, onDeleted }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-gray-100 text-sm">{rule.title}</span>
-            <span className={`text-[10px] border rounded-full px-2 py-0.5 font-mono ${branchBadgeColor[rule.defaultBranchType]}`}>
-              {rule.defaultBranchType}
+            <span className={`text-[10px] border rounded-full px-2 py-0.5 ${branchBadgeColor[rule.defaultBranchType] || branchBadgeColor.none}`}>
+              {rule.defaultBranchType}{rule.defaultBranchType === 'select' ? ` (${rule.defaultBranchLabels?.length || 0})` : ''}
             </span>
-            <span className={`text-[10px] border rounded-full px-2 py-0.5 ${rule.ruleType === 'macro' ? 'bg-amber-900/60 border-amber-700 text-amber-300' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
-              {rule.ruleType === 'macro' ? `macro ${rule.macroTime}` : 'conditional'}
+            <span className={`text-[10px] border rounded-full px-2 py-0.5 ${
+              rule.ruleType === 'macro' ? 'bg-amber-900/60 border-amber-700 text-amber-300'
+              : rule.ruleType === 'input' ? 'bg-cyan-900/60 border-cyan-700 text-cyan-300'
+              : 'bg-gray-800 border-gray-700 text-gray-400'
+            }`}>
+              {rule.ruleType === 'macro' ? `macro ${rule.macroTime}`
+              : rule.ruleType === 'input' ? `input:${rule.inputType || 'text'}`
+              : 'conditional'}
             </span>
           </div>
           <p className="text-xs text-gray-500 font-mono mt-0.5">{rule.ruleId}</p>
@@ -280,7 +336,12 @@ function RuleCard({ rule, onUpdated, onDeleted }) {
           <RuleForm
             initial={{
               ...rule,
-              defaultBranchLabels: rule.defaultBranchLabels?.length === 2 ? rule.defaultBranchLabels : [...(rule.defaultBranchLabels || []), ''].slice(0, 2),
+              defaultBranchLabels: rule.defaultBranchType === 'select'
+                ? (rule.defaultBranchLabels || [])
+                : rule.defaultBranchLabels?.length === 2
+                  ? rule.defaultBranchLabels
+                  : [...(rule.defaultBranchLabels || []), ''].slice(0, 2),
+              inputType: rule.inputType || '',
               macroTime: rule.macroTime || '',
               tags: rule.tags || [],
             }}

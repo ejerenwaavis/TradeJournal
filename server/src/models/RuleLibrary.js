@@ -7,10 +7,12 @@ const ruleLibrarySchema = new mongoose.Schema(
     title:    { type: String, required: true, trim: true },
     description: { type: String, default: '' },
 
-    defaultBranchType:   { type: String, enum: ['none', 'single', 'fork'], default: 'none' },
-    defaultBranchLabels: { type: [String], validate: { validator: (v) => v.length <= 2, message: 'Max 2 branch labels' } },
+    defaultBranchType:   { type: String, enum: ['none', 'single', 'fork', 'select'], default: 'none' },
+    defaultBranchLabels: { type: [String], validate: { validator: (v) => v.length <= 20, message: 'Max 20 branch labels' } },
 
-    ruleType:  { type: String, enum: ['conditional', 'macro'], required: true, default: 'conditional' },
+    ruleType:  { type: String, enum: ['conditional', 'macro', 'input'], required: true, default: 'conditional' },
+    // For 'input' ruleType: what kind of value the trader enters
+    inputType: { type: String, enum: ['number', 'text', 'time', ''], default: '' },
     macroTime: {
       type: String,
       default: null,

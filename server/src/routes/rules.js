@@ -21,7 +21,7 @@ router.get('/library', async (req, res) => {
 // Creates a new library rule
 router.post('/library', async (req, res) => {
   try {
-    const { ruleId, title, description, defaultBranchType, defaultBranchLabels, ruleType, macroTime, tags } = req.body;
+    const { ruleId, title, description, defaultBranchType, defaultBranchLabels, ruleType, inputType, macroTime, tags } = req.body;
 
     if (!ruleId?.trim()) return res.status(400).json({ error: 'ruleId is required' });
     if (!title?.trim()) return res.status(400).json({ error: 'title is required' });
@@ -43,6 +43,7 @@ router.post('/library', async (req, res) => {
       defaultBranchType: defaultBranchType || 'none',
       defaultBranchLabels: defaultBranchLabels || [],
       ruleType: ruleType || 'conditional',
+      inputType: (ruleType === 'input' && inputType) ? inputType : '',
       macroTime: (ruleType === 'macro' && macroTime) ? macroTime : null,
       tags: tags || [],
     });
@@ -58,7 +59,7 @@ router.post('/library', async (req, res) => {
 // Updates a library rule (ruleId itself cannot be changed)
 router.put('/library/:ruleId', async (req, res) => {
   try {
-    const { title, description, defaultBranchType, defaultBranchLabels, ruleType, macroTime, tags } = req.body;
+    const { title, description, defaultBranchType, defaultBranchLabels, ruleType, inputType, macroTime, tags } = req.body;
 
     const update = {};
     if (title !== undefined) update.title = title.trim();
@@ -66,6 +67,7 @@ router.put('/library/:ruleId', async (req, res) => {
     if (defaultBranchType !== undefined) update.defaultBranchType = defaultBranchType;
     if (defaultBranchLabels !== undefined) update.defaultBranchLabels = defaultBranchLabels;
     if (ruleType !== undefined) update.ruleType = ruleType;
+    if (inputType !== undefined) update.inputType = inputType || '';
     if (macroTime !== undefined) update.macroTime = macroTime || null;
     if (tags !== undefined) update.tags = tags;
 
@@ -163,6 +165,7 @@ router.post('/library/bulk', async (req, res) => {
           defaultBranchType: r.defaultBranchType || 'none',
           defaultBranchLabels: r.defaultBranchLabels || [],
           ruleType: r.ruleType || 'conditional',
+          inputType: (r.ruleType === 'input' && r.inputType) ? r.inputType : '',
           macroTime: (r.ruleType === 'macro' && r.macroTime) ? r.macroTime : null,
           tags: r.tags || [],
           mlRegistryId: r.mlRegistryId || null,
