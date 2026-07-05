@@ -45,7 +45,7 @@ export default function MLParametersPanel({ values = {}, onChange, errors = {}, 
 
   // Count how many parameters have values
   const filledCount = useMemo(() => {
-    if (!registry) return 0;
+    if (!registry || !registry.rules) return 0;
     return registry.rules.filter(r => {
       const v = values[r.mlKey];
       return v !== null && v !== undefined && v !== '';
