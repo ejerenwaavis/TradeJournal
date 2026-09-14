@@ -360,7 +360,21 @@ const BLANK_SETUP = {
 
 function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel }) {
   const topicMacroWindows = topic?.macroWindows || [];
-  const studyParams = topic?.studyParameters || { showLiquidity: true, showMarketStructure: true, showPDArray: true };
+  const studyParams = topic?.studyParameters || {};
+
+  const hasObservations = Boolean(studyParams.showObservations || (!topicMasterRules?.length));
+  const hasMacroWindows = Boolean(topicMacroWindows.length > 0 && studyParams.showMacroWindows);
+  const hasLiquidity = Boolean(studyParams.showLiquidity);
+  const hasPDArray = Boolean(studyParams.showPDArray);
+  const hasMarketStructure = Boolean(studyParams.showMarketStructure);
+  const hasTradeOpportunities = Boolean(studyParams.showTradeOpportunities);
+  const hasNews = Boolean(studyParams.showNews);
+  const hasDiscoveries = Boolean(studyParams.showDiscoveries);
+  const hasSessionClarity = Boolean(studyParams.showSessionClarity);
+  const hasAnalytics = Boolean(studyParams.showAnalytics);
+  const hasNarrative = Boolean(studyParams.showNarrative);
+  const hasNotes = Boolean(studyParams.showNotes !== false);
+  const hasMlParameters = Boolean(studyParams.showMlParameters);
 
   const baseRules = topicMasterRules?.length
     ? topicMasterRules.map(r => {
@@ -1248,81 +1262,84 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         )}
 
         {/* ── Additional Observations (free-form, editable) ─────────────── */}
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-2">
-            {form.setupRules.some(r => r.isMasterRule) ? 'Additional Observations' : 'Setup Rules / Entry Conditions'}
-          </label>
-          <div className="space-y-2">
-            {form.setupRules
-              .map((rule, i) => ({ rule, i }))
-              .filter(({ rule }) => !rule.isMasterRule)
-              .map(({ rule, i }, freeIdx) => (
-                <div key={i}>
-                  <div
-                    draggable
-                    onDragStart={() => { dragRuleIndex.current = i; }}
-                    onDragEnter={() => { dragOverRuleIndex.current = i; setDragOverIdx(i); }}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDragEnd={() => {
-                      if (dragRuleIndex.current !== null && dragOverRuleIndex.current !== null && dragRuleIndex.current !== dragOverRuleIndex.current) {
-                        moveRule(dragRuleIndex.current, dragOverRuleIndex.current);
-                      }
-                      dragRuleIndex.current = null; dragOverRuleIndex.current = null; setDragOverIdx(null);
-                    }}
-                    className={`flex gap-2 items-center rounded-lg transition-colors ${
-                      dragOverIdx === i ? 'bg-indigo-950/60 border border-indigo-700' : 'border border-transparent'
-                    }`}
-                  >
-                    <span className="text-gray-600 cursor-grab active:cursor-grabbing shrink-0 px-1 py-2 hover:text-gray-400 transition-colors">
-                      <Bars3Icon className="w-4 h-4" />
-                    </span>
-                    <span className="text-xs text-gray-600 w-5 text-right shrink-0">{freeIdx + 1}.</span>
-                    <input
-                      type="text"
-                      value={rule.text}
-                      onChange={(e) => setRule(i, e.target.value)}
-                      placeholder="Observation…"
-                      className={`${inputCls} flex-1`}
-                      ref={(el) => { if (el) ruleInputRefs.current[`r-${i}`] = el; else delete ruleInputRefs.current[`r-${i}`]; }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') { e.preventDefault(); addRule(i); }
-                        if (e.key === 'Backspace' && rule.text === '' && !rule.subs?.length) { e.preventDefault(); removeRule(i); }
+        {hasObservations && (
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-2">
+              {form.setupRules.some(r => r.isMasterRule) ? 'Additional Observations' : 'Setup Rules / Entry Conditions'}
+            </label>
+            <div className="space-y-2">
+              {form.setupRules
+                .map((rule, i) => ({ rule, i }))
+                .filter(({ rule }) => !rule.isMasterRule)
+                .map(({ rule, i }, freeIdx) => (
+                  <div key={i}>
+                    <div
+                      draggable
+                      onDragStart={() => { dragRuleIndex.current = i; }}
+                      onDragEnter={() => { dragOverRuleIndex.current = i; setDragOverIdx(i); }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDragEnd={() => {
+                        if (dragRuleIndex.current !== null && dragOverRuleIndex.current !== null && dragRuleIndex.current !== dragOverRuleIndex.current) {
+                          moveRule(dragRuleIndex.current, dragOverRuleIndex.current);
+                        }
+                        dragRuleIndex.current = null; dragOverRuleIndex.current = null; setDragOverIdx(null);
                       }}
-                    />
-                    <button type="button" onClick={() => addSub(i)} className="text-gray-600 hover:text-indigo-400 shrink-0 transition-colors" title="Add sub-note">
-                      <PlusIcon className="w-3.5 h-3.5" />
-                    </button>
-                    <button type="button" onClick={() => removeRule(i)} className="text-rose-500 hover:text-rose-400 shrink-0"><TrashIcon className="w-4 h-4" /></button>
-                  </div>
-                  {(rule.subs || []).map((sub, j) => (
-                    <div key={j} className="flex gap-2 items-center ml-10 mt-1">
-                      <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                      className={`flex gap-2 items-center rounded-lg transition-colors ${
+                        dragOverIdx === i ? 'bg-indigo-950/60 border border-indigo-700' : 'border border-transparent'
+                      }`}
+                    >
+                      <span className="text-gray-600 cursor-grab active:cursor-grabbing shrink-0 px-1 py-2 hover:text-gray-400 transition-colors">
+                        <Bars3Icon className="w-4 h-4" />
+                      </span>
+                      <span className="text-xs text-gray-600 w-5 text-right shrink-0">{freeIdx + 1}.</span>
                       <input
                         type="text"
-                        value={sub}
-                        onChange={(e) => setSub(i, j, e.target.value)}
-                        placeholder="Caveat or expected reaction…"
-                        className="w-full bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex-1"
-                        ref={(el) => { if (el) ruleInputRefs.current[`s-${i}-${j}`] = el; else delete ruleInputRefs.current[`s-${i}-${j}`]; }}
+                        value={rule.text}
+                        onChange={(e) => setRule(i, e.target.value)}
+                        placeholder="Observation…"
+                        className={`${inputCls} flex-1`}
+                        ref={(el) => { if (el) ruleInputRefs.current[`r-${i}`] = el; else delete ruleInputRefs.current[`r-${i}`]; }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); addSub(i, j); }
-                          if (e.key === 'Backspace' && sub === '') { e.preventDefault(); removeSub(i, j); }
+                          if (e.key === 'Enter') { e.preventDefault(); addRule(i); }
+                          if (e.key === 'Backspace' && rule.text === '' && !rule.subs?.length) { e.preventDefault(); removeRule(i); }
                         }}
                       />
-                      <button type="button" onClick={() => removeSub(i, j)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors"><TrashIcon className="w-3.5 h-3.5" /></button>
+                      <button type="button" onClick={() => addSub(i)} className="text-gray-600 hover:text-indigo-400 shrink-0 transition-colors" title="Add sub-note">
+                        <PlusIcon className="w-3.5 h-3.5" />
+                      </button>
+                      <button type="button" onClick={() => removeRule(i)} className="text-rose-500 hover:text-rose-400 shrink-0"><TrashIcon className="w-4 h-4" /></button>
                     </div>
-                  ))}
-                </div>
-              ))}
-            <button type="button" onClick={() => addRule()} className="text-xs text-indigo-400 hover:underline">+ Add observation</button>
+                    {(rule.subs || []).map((sub, j) => (
+                      <div key={j} className="flex gap-2 items-center ml-10 mt-1">
+                        <span className="text-xs text-indigo-500 shrink-0 select-none font-medium">{String.fromCharCode(97 + j)}.</span>
+                        <input
+                          type="text"
+                          value={sub}
+                          onChange={(e) => setSub(i, j, e.target.value)}
+                          placeholder="Caveat or expected reaction…"
+                          className="w-full bg-gray-800/60 border border-gray-700/60 rounded-md px-3 py-1.5 text-xs text-gray-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex-1"
+                          ref={(el) => { if (el) ruleInputRefs.current[`s-${i}-${j}`] = el; else delete ruleInputRefs.current[`s-${i}-${j}`]; }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); addSub(i, j); }
+                            if (e.key === 'Backspace' && sub === '') { e.preventDefault(); removeSub(i, j); }
+                          }}
+                        />
+                        <button type="button" onClick={() => removeSub(i, j)} className="text-gray-600 hover:text-rose-400 shrink-0 transition-colors"><TrashIcon className="w-3.5 h-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              <button type="button" onClick={() => addRule()} className="text-xs text-indigo-400 hover:underline">+ Add observation</button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ══ Review Mode only: everything below hidden in Live Mode ═══════ */}
       {!liveMode && (<>
 
       {/* Discoveries — variable observations unique to this setup */}
+      {hasDiscoveries && (
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Discoveries / Variable Observations</label>
         <p className="text-xs text-gray-500 mb-2">What was unique about this setup? Press Enter to add.</p>
@@ -1365,9 +1382,10 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           <button type="button" onClick={() => setForm(f => ({ ...f, discoveries: [...(f.discoveries || []), { text: '', promoted: false }] }))} className="text-xs text-indigo-400 hover:underline">+ Add discovery</button>
         </div>
       </div>
+      )}
 
       {/* ── Macro Windows ── */}
-      {topicMacroWindows.length > 0 && (
+      {hasMacroWindows && (
         <div>
           <SectionHeading>Macro Windows Touched</SectionHeading>
           <p className="text-xs text-gray-500 mb-2">Select all macro windows that interacted with price in this setup</p>
@@ -1383,7 +1401,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       )}
 
       {/* ── Liquidity ── */}
-      {studyParams.showLiquidity && (
+      {hasLiquidity && (
       <div className="space-y-3">
         <SectionHeading>Liquidity</SectionHeading>
         <div>
@@ -1446,7 +1464,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       )}
 
       {/* ── PD Array (shared context) ── */}
-      {studyParams.showPDArray && (
+      {hasPDArray && (
       <div>
         <SectionHeading>PD Array</SectionHeading>
         <input type="text" value={form.pdArray} onChange={set('pdArray')} placeholder="e.g. 1st Presented FVG, Breaker OB" className={inputCls} />
@@ -1454,7 +1472,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       )}
 
       {/* ── Market Structure ── */}
-      {studyParams.showMarketStructure && (
+      {hasMarketStructure && (
       <div className="space-y-3">
         <SectionHeading>Market Structure</SectionHeading>
         <div>
@@ -1476,6 +1494,7 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       )}
 
       {/* ── Session (shared) ── */}
+      {hasAnalytics && (
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Session</label>
         <select value={form.session} onChange={set('session')} className={selectCls}>
@@ -1483,8 +1502,10 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           {SESSIONS.map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>
+      )}
 
       {/* ══ Trade Opportunities ══════════════════════════════════════════ */}
+      {hasTradeOpportunities && (
       <div className="space-y-3">
         <SectionHeading>Trade Opportunities</SectionHeading>
         {form.opportunities.length > 1 && (
@@ -1608,8 +1629,10 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
 
         <button type="button" onClick={addOpportunity} className="text-xs text-indigo-400 hover:underline">+ Add another trade opportunity</button>
       </div>
+      )}
 
       {/* News Entries */}
+      {hasNews && (
       <div className="space-y-2">
         <label className="block text-xs font-medium text-gray-400 mb-1">News Events</label>
         {(form.newsEntries || []).map((entry, ni) => (
@@ -1678,6 +1701,10 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           + Add news entry
         </button>
       </div>
+      )}
+
+      {/* Narrative */}
+      {hasNarrative && (
       <div>
         <div className="flex items-center justify-between mb-1">
           <label className="text-xs font-medium text-gray-400">Narrative</label>
@@ -1718,12 +1745,18 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
         </div>
         <textarea rows={3} value={form.narrative} onChange={set('narrative')} placeholder="What is the story behind this setup? Or click ↻ to auto-fill from observations…" className={`${inputCls} resize-none`} />
       </div>
+      )}
+
+      {/* Notes */}
+      {hasNotes && (
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1">Notes</label>
         <textarea rows={2} value={form.notes} onChange={set('notes')} placeholder="Additional notes…" className={`${inputCls} resize-none`} />
       </div>
+      )}
 
       {/* Analytics fields */}
+      {hasAnalytics && (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
@@ -1759,12 +1792,13 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
           </select>
         </div>
       </div>
+      )}
 
       </>)}
       {/* ══ End Review Mode only block ════════════════════════════════════ */}
 
       {/* Clarity Score — Review Mode only */}
-      {!liveMode && (
+      {!liveMode && hasSessionClarity && (
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-2">Session Clarity Score</label>
           <p className="text-xs text-gray-600 mb-2">How cleanly did price deliver the framework?</p>
@@ -1789,13 +1823,15 @@ function SetupForm({ topicId, topicMasterRules, topic, initial, onSave, onCancel
       )}
 
       {/* ML Parameters Panel — Registry-driven, validated at save time */}
-      <MLParametersPanel
-        values={form.mlParameters}
-        onChange={(mlKey, value) => setForm(f => ({
-          ...f,
-          mlParameters: { ...f.mlParameters, [mlKey]: value },
-        }))}
-      />
+      {hasMlParameters && (
+        <MLParametersPanel
+          values={form.mlParameters}
+          onChange={(mlKey, value) => setForm(f => ({
+            ...f,
+            mlParameters: { ...f.mlParameters, [mlKey]: value },
+          }))}
+        />
+      )}
 
       <div className="flex gap-3 pt-1">
         <button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg">
@@ -2260,9 +2296,19 @@ function TopicModal({ initial, onSave, onClose }) {
       : [],
     macroWindows: initial?.macroWindows ?? [],
     studyParameters: {
-      showLiquidity:       initial?.studyParameters?.showLiquidity ?? true,
-      showMarketStructure: initial?.studyParameters?.showMarketStructure ?? true,
-      showPDArray:         initial?.studyParameters?.showPDArray ?? true,
+      showObservations:        initial?.studyParameters?.showObservations ?? false,
+      showNotes:               initial?.studyParameters?.showNotes ?? true,
+      showNarrative:           initial?.studyParameters?.showNarrative ?? false,
+      showDiscoveries:         initial?.studyParameters?.showDiscoveries ?? false,
+      showLiquidity:           initial?.studyParameters?.showLiquidity ?? false,
+      showMarketStructure:     initial?.studyParameters?.showMarketStructure ?? false,
+      showPDArray:             initial?.studyParameters?.showPDArray ?? false,
+      showMacroWindows:        initial?.studyParameters?.showMacroWindows ?? false,
+      showTradeOpportunities:  initial?.studyParameters?.showTradeOpportunities ?? false,
+      showSessionClarity:      initial?.studyParameters?.showSessionClarity ?? false,
+      showAnalytics:           initial?.studyParameters?.showAnalytics ?? false,
+      showNews:                initial?.studyParameters?.showNews ?? false,
+      showMlParameters:        initial?.studyParameters?.showMlParameters ?? false,
     },
   });
   const [saving, setSaving] = useState(false);
@@ -2334,6 +2380,7 @@ function TopicModal({ initial, onSave, onClose }) {
           ruleId: r.ruleId || null,
           isFromLibrary: r.isFromLibrary || false,
           ruleType: r.ruleType || 'conditional',
+          inputType: r.inputType || '',
           macroTime: r.macroTime || null,
           branchType: r.branchType || 'none',
           branchLabels: r.branchLabels || [],
@@ -2677,28 +2724,154 @@ function TopicModal({ initial, onSave, onClose }) {
         </div>
 
         {/* Study Parameters */}
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">Study Parameters</label>
-          <p className="text-xs text-gray-500 mb-2">Choose which ICT mechanics sections appear when logging setups under this topic.</p>
-          <div className="space-y-2">
-            {[
-              { key: 'showLiquidity', label: 'Liquidity Profiling', desc: 'Sweep type, direction, target liquidity, quality' },
-              { key: 'showMarketStructure', label: 'Market Structure', desc: 'MSS direction, candle time, engineered liquidity' },
-              { key: 'showPDArray', label: 'PD Array', desc: 'Price delivery array input' },
-            ].map(({ key, label, desc }) => (
-              <label key={key} className="flex items-start gap-3 cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={form.studyParameters[key]}
-                  onChange={(e) => setForm(f => ({ ...f, studyParameters: { ...f.studyParameters, [key]: e.target.checked } }))}
-                  className="mt-0.5 w-4 h-4 accent-indigo-500 cursor-pointer"
-                />
-                <div>
-                  <span className="text-sm text-gray-300 group-hover:text-gray-100 transition-colors">{label}</span>
-                  <p className="text-xs text-gray-600">{desc}</p>
-                </div>
-              </label>
-            ))}
+        <div className="border border-gray-800 rounded-xl p-4 bg-gray-950/40 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-gray-200">Study Fields & Sections</label>
+              <p className="text-[11px] text-gray-500">Choose which sections appear when logging setups under this topic. Only enabled sections will appear in the form.</p>
+            </div>
+            {/* Quick preset buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setForm(f => ({
+                  ...f,
+                  studyParameters: {
+                    showObservations: false, showNotes: true, showNarrative: false, showDiscoveries: false,
+                    showLiquidity: false, showMarketStructure: false, showPDArray: false, showMacroWindows: false,
+                    showTradeOpportunities: false, showSessionClarity: false, showAnalytics: false, showNews: false, showMlParameters: false,
+                  }
+                }))}
+                className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 transition-colors"
+                title="Only master rules and notes"
+              >
+                Rules Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({
+                  ...f,
+                  studyParameters: {
+                    showObservations: false, showNotes: true, showNarrative: false, showDiscoveries: false,
+                    showLiquidity: true, showMarketStructure: true, showPDArray: true, showMacroWindows: true,
+                    showTradeOpportunities: true, showSessionClarity: false, showAnalytics: true, showNews: false, showMlParameters: false,
+                  }
+                }))}
+                className="text-[10px] px-2 py-1 bg-indigo-950/80 hover:bg-indigo-900/80 text-indigo-300 rounded border border-indigo-800 transition-colors"
+                title="Liquidity, market structure, PD array, opportunities, analytics, notes"
+              >
+                Standard ICT
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({
+                  ...f,
+                  studyParameters: {
+                    showObservations: true, showNotes: true, showNarrative: true, showDiscoveries: true,
+                    showLiquidity: true, showMarketStructure: true, showPDArray: true, showMacroWindows: true,
+                    showTradeOpportunities: true, showSessionClarity: true, showAnalytics: true, showNews: true, showMlParameters: true,
+                  }
+                }))}
+                className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 transition-colors"
+              >
+                All Fields
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({
+                  ...f,
+                  studyParameters: {
+                    showObservations: false, showNotes: false, showNarrative: false, showDiscoveries: false,
+                    showLiquidity: false, showMarketStructure: false, showPDArray: false, showMacroWindows: false,
+                    showTradeOpportunities: false, showSessionClarity: false, showAnalytics: false, showNews: false, showMlParameters: false,
+                  }
+                }))}
+                className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded border border-gray-700 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-1">
+            {/* ICT Mechanics */}
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-1.5">ICT Mechanics</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { key: 'showLiquidity', label: 'Liquidity Profiling', desc: 'Sweep type, direction, target, quality' },
+                  { key: 'showMarketStructure', label: 'Market Structure', desc: 'MSS direction, candle time, engineered liq' },
+                  { key: 'showPDArray', label: 'PD Array', desc: 'Price delivery array level & return to PD' },
+                  { key: 'showMacroWindows', label: 'Macro Windows', desc: 'Interactions with macro timing windows' },
+                ].map(({ key, label, desc }) => (
+                  <label key={key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${form.studyParameters[key] ? 'bg-indigo-950/30 border-indigo-800/80' : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.studyParameters[key])}
+                      onChange={(e) => setForm(f => ({ ...f, studyParameters: { ...f.studyParameters, [key]: e.target.checked } }))}
+                      className="mt-0.5 w-3.5 h-3.5 accent-indigo-500 cursor-pointer"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-gray-200 block">{label}</span>
+                      <p className="text-[10px] text-gray-500 leading-tight">{desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Execution & Analytics */}
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-1.5">Execution & Analytics</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { key: 'showTradeOpportunities', label: 'Trade Opportunities', desc: 'Bias, entry/stop, outcome, R-mult, MFE/MAE, confluences' },
+                  { key: 'showAnalytics', label: 'Session & Analytics', desc: 'Date, session, direction, sweep style & type' },
+                  { key: 'showSessionClarity', label: 'Session Clarity Score', desc: '1-3 rating (Choppy, Readable, Textbook)' },
+                  { key: 'showNews', label: 'Economic News Events', desc: 'Scheduled news events, times, impact severity' },
+                  { key: 'showMlParameters', label: 'ML Parameters Panel', desc: '11 registry-driven machine learning rules' },
+                ].map(({ key, label, desc }) => (
+                  <label key={key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${form.studyParameters[key] ? 'bg-indigo-950/30 border-indigo-800/80' : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.studyParameters[key])}
+                      onChange={(e) => setForm(f => ({ ...f, studyParameters: { ...f.studyParameters, [key]: e.target.checked } }))}
+                      className="mt-0.5 w-3.5 h-3.5 accent-indigo-500 cursor-pointer"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-gray-200 block">{label}</span>
+                      <p className="text-[10px] text-gray-500 leading-tight">{desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Notes & Context */}
+            <div>
+              <p className="text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-1.5">Notes & Context</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  { key: 'showNotes', label: 'Setup Notes', desc: 'Quick notes text area' },
+                  { key: 'showObservations', label: 'Additional Observations', desc: 'Free-form setup rules alongside master rules' },
+                  { key: 'showNarrative', label: 'Narrative Story', desc: 'Trade narrative with auto-sync from timestamps' },
+                  { key: 'showDiscoveries', label: 'Discoveries', desc: 'Unique setup nuances to promote into future rules' },
+                ].map(({ key, label, desc }) => (
+                  <label key={key} className={`flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition-colors ${form.studyParameters[key] ? 'bg-indigo-950/30 border-indigo-800/80' : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.studyParameters[key])}
+                      onChange={(e) => setForm(f => ({ ...f, studyParameters: { ...f.studyParameters, [key]: e.target.checked } }))}
+                      className="mt-0.5 w-3.5 h-3.5 accent-indigo-500 cursor-pointer"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-medium text-gray-200 block">{label}</span>
+                      <p className="text-[10px] text-gray-500 leading-tight">{desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

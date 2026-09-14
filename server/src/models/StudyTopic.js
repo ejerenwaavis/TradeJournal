@@ -12,11 +12,21 @@ const studyTopicSchema = new mongoose.Schema(
     // Custom macro windows for this topic (e.g. ['9:30','9:50','10:10','10:50','11:10'])
     macroWindows: [{ type: String }],
 
-    // Controls which ICT mechanics sections appear in setup forms
+    // Controls which sections and mechanics appear in setup forms when taking notes
     studyParameters: {
-      showLiquidity:       { type: Boolean, default: true },
-      showMarketStructure: { type: Boolean, default: true },
-      showPDArray:         { type: Boolean, default: true },
+      showLiquidity:           { type: Boolean, default: false },
+      showMarketStructure:     { type: Boolean, default: false },
+      showPDArray:             { type: Boolean, default: false },
+      showMacroWindows:        { type: Boolean, default: false },
+      showTradeOpportunities:  { type: Boolean, default: false },
+      showMlParameters:        { type: Boolean, default: false },
+      showNews:                { type: Boolean, default: false },
+      showDiscoveries:         { type: Boolean, default: false },
+      showSessionClarity:      { type: Boolean, default: false },
+      showAnalytics:           { type: Boolean, default: false },
+      showObservations:        { type: Boolean, default: false },
+      showNarrative:           { type: Boolean, default: false },
+      showNotes:               { type: Boolean, default: true },
     },
 
     // Topic-level public sharing
